@@ -1,5 +1,36 @@
+# Dependencies
 node_modules/
-.next/
+
+# Build output
 dist/
-build/
+
+# Environment variables (NEVER commit secrets)
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
 *.log
+npm-debug.log*
+
+# Supabase local
+.supabase/
+
+# Testing
+coverage/
+
+# Misc
+*.tsbuildinfo
+.next/
+build/
