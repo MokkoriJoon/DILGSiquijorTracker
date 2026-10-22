@@ -1,20 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AuthService } from '../services/auth';
-import { Building2, UserPlus, Eye, EyeOff, ArrowLeft, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { UserService } from '../services/database';
+import { Building2, UserPlus, Eye, EyeOff, ArrowLeft, AlertCircle, Shield } from 'lucide-react';
 import { Role } from '../types';
+import { DEPARTMENTS } from '../data/mockData';
 
 export default function Register() {
   const navigate = useNavigate();
   const { login } = useAuth();
   
+  const [isFirstUser, setIsFirstUser] = useState(true);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     confirmPassword: '',
-    department: 'Central Office',
+    department: DEPARTMENTS[0],
     role: 'STANDARD' as Role,
   });
   
@@ -23,16 +26,10 @@ export default function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const departments = [
-    'Central Office',
-    'Regional Office - NCR',
-    'Regional Office - Region III',
-    'Regional Office - Region IV-A',
-    'Regional Office - Region VII',
-    'Regional Office - Region IX',
-    'Regional Office - Region X',
-    'Provincial Office - Cavite',
-  ];
+  useEffect(() => {
+    // Check if this is the first user (will become admin)
+    setIsFirstUser(UserService.getAll().length === 0);
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({
@@ -82,7 +79,12 @@ export default function Register() {
       // Auto-login after registration
       const loginResult = login(formData.email, formData.password);
       if (loginResult.success) {
-        navigate('/dashboard');
+        if (result.isFirstAdmin) {
+          // First admin - show welcome message and redirect to dashboard
+          navigate('/dashboard?welcome=admin');
+        } else {
+          navigate('/dashboard');
+        }
       } else {
         setError('Registration successful but login failed. Please try logging in.');
       }
@@ -219,30 +221,45 @@ export default function Register() {
                 className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
                 required
               >
-                {departments.map(dept => (
+                {DEPARTMENTS.map((dept: string) => (
                   <option key={dept} value={dept}>{dept}</option>
                 ))}
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Role *
-              </label>
-              <select
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
-                required
-              >
-                <option value="STANDARD">Standard User</option>
-                <option value="ADMIN">Admin</option>
-              </select>
-              <p className="text-xs text-slate-500 mt-1">
-                Standard users can view and update their assigned tasks. Admins can manage all tasks and users.
-              </p>
-            </div>
+            {isFirstUser ? (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <Shield className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800">First Admin Account</p>
+                    <p className="text-xs text-amber-700 mt-1">
+                      You're setting up the system! This account will automatically be assigned the <strong>Admin</strong> role 
+                      with full system access. After registration, you can create additional user accounts.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Role *
+                </label>
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+                  required
+                >
+                  <option value="STANDARD">Standard User</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+                <p className="text-xs text-slate-500 mt-1">
+                  Standard users can view and update their assigned tasks. Admins can manage all tasks and users.
+                </p>
+              </div>
+            )}
 
             <button
               type="submit"
@@ -271,7 +288,7 @@ export default function Register() {
         </div>
 
         <p className="text-center text-xs text-blue-200/60 mt-6">
-          Republic of the Philippines • Department of the Interior and Local Government
+          DILG Region NIR • Siquijor Province
         </p>
       </div>
     </div>

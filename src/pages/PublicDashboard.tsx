@@ -73,13 +73,13 @@ export default function PublicDashboard() {
                   <Building2 className="w-8 h-8 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl lg:text-3xl font-bold">DILG Task Tracker</h1>
-                  <p className="text-blue-200 text-sm">Department of the Interior and Local Government</p>
+                  <h1 className="text-2xl lg:text-3xl font-bold">DILG Siquijor</h1>
+                  <p className="text-blue-200 text-sm">Task Tracker • Region NIR</p>
                 </div>
               </div>
               <p className="text-blue-100 max-w-xl text-sm lg:text-base">
                 Real-time monitoring of departmental programs, task completion, and performance metrics 
-                across all regional and provincial offices.
+                for DILG Siquijor Provincial Office and all municipalities.
               </p>
             </div>
             <div className="flex gap-3">
@@ -226,7 +226,7 @@ export default function PublicDashboard() {
         {/* Footer */}
         <footer className="mt-12 pt-8 border-t border-slate-200 text-center">
           <p className="text-xs text-slate-500">
-            © 2025 Department of the Interior and Local Government. All rights reserved.
+            © 2025 DILG Region NIR • Siquijor Provincial Office
           </p>
           <p className="text-xs text-slate-400 mt-1">
             Republic of the Philippines

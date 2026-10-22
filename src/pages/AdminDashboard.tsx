@@ -43,15 +43,15 @@ export default function AdminDashboard() {
   };
 
   const handleResetDatabase = () => {
-    if (confirm('⚠️ This will reset ALL data to the original demo state. All registered users, tasks, and files will be deleted. Are you sure?')) {
+    if (confirm('⚠️ This will DELETE ALL data including users, tasks, and files. The system will be completely empty. Are you sure?')) {
       resetDatabase();
       // Clear passwords
       localStorage.removeItem('dilg_passwords');
       refreshData();
       addToast({
         type: 'info',
-        title: 'Database Reset',
-        message: 'All data has been restored to demo defaults',
+        title: 'System Reset',
+        message: 'All data has been cleared',
       });
     }
   };

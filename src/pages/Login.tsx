@@ -119,34 +119,6 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Demo credentials */}
-          <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
-            <p className="text-xs font-semibold text-slate-600 mb-2">Demo Credentials:</p>
-            <div className="space-y-1.5">
-              <button
-                onClick={() => { setEmail('admin@dilg.gov.ph'); setPassword('admin123'); }}
-                className="w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-white rounded transition-colors flex justify-between items-center"
-              >
-                <span><strong>Admin:</strong> admin@dilg.gov.ph</span>
-                <span className="text-blue-600 font-medium">Click to fill</span>
-              </button>
-              <button
-                onClick={() => { setEmail('juan.cruz@dilg.gov.ph'); setPassword('user123'); }}
-                className="w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-white rounded transition-colors flex justify-between items-center"
-              >
-                <span><strong>User:</strong> juan.cruz@dilg.gov.ph</span>
-                <span className="text-blue-600 font-medium">Click to fill</span>
-              </button>
-              <button
-                onClick={() => { setEmail('ana.reyes@dilg.gov.ph'); setPassword('user123'); }}
-                className="w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-white rounded transition-colors flex justify-between items-center"
-              >
-                <span><strong>User:</strong> ana.reyes@dilg.gov.ph</span>
-                <span className="text-blue-600 font-medium">Click to fill</span>
-              </button>
-            </div>
-          </div>
-
           {/* Register link */}
           <div className="mt-6 text-center">
             <p className="text-sm text-slate-600">
@@ -159,7 +131,7 @@ export default function Login() {
         </div>
 
         <p className="text-center text-xs text-blue-200/60 mt-6">
-          Republic of the Philippines • Department of the Interior and Local Government
+          DILG Region NIR • Siquijor Province
         </p>
       </div>
     </div>

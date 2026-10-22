@@ -305,14 +305,13 @@ export default function UserManagement() {
                   onChange={(e) => setFormDepartment(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                 >
-                  <option>Central Office</option>
-                  <option>Regional Office - NCR</option>
-                  <option>Regional Office - Region III</option>
-                  <option>Regional Office - Region IV-A</option>
-                  <option>Regional Office - Region VII</option>
-                  <option>Regional Office - Region IX</option>
-                  <option>Regional Office - Region X</option>
-                  <option>Provincial Office - Cavite</option>
+                  <option>DILG Siquijor Provincial Office</option>
+                  <option>Municipality of Siquijor</option>
+                  <option>Municipality of Larena</option>
+                  <option>Municipality of San Juan</option>
+                  <option>Municipality of Enrique Villanueva</option>
+                  <option>Municipality of Maria</option>
+                  <option>Municipality of Lazi</option>
                 </select>
               </div>
               <div>

@@ -58,8 +58,8 @@ export default function Layout({ children }: LayoutProps) {
             <Building2 className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-sm leading-tight">DILG</h1>
-            <p className="text-[10px] text-blue-300 leading-tight">Task Tracker</p>
+            <h1 className="font-bold text-sm leading-tight">DILG Siquijor</h1>
+            <p className="text-[10px] text-blue-300 leading-tight">Region NIR</p>
           </div>
           <button
             className="lg:hidden ml-auto text-blue-300 hover:text-white"
@@ -140,7 +140,7 @@ export default function Layout({ children }: LayoutProps) {
               {navItems.find(i => i.path === location.pathname)?.label || 'Dashboard'}
             </h2>
             <p className="text-xs text-slate-500">
-              Department of the Interior and Local Government
+              DILG Region NIR • Siquijor Province
             </p>
           </div>
           <div className="flex items-center gap-2">

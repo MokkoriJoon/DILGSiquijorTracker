@@ -298,12 +298,15 @@ export default function TaskManagement() {
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                   >
                     <option>Reporting</option>
-                    <option>Performance</option>
-                    <option>Monitoring</option>
-                    <option>Field Operations</option>
-                    <option>Finance</option>
-                    <option>Governance</option>
+                    <option>LGU Compliance</option>
+                    <option>Barangay Governance</option>
+                    <option>Peace & Order</option>
+                    <option>Disaster Preparedness</option>
+                    <option>Capacity Building</option>
+                    <option>Finance & Budget</option>
                     <option>Administration</option>
+                    <option>Field Operations</option>
+                    <option>Performance Review</option>
                   </select>
                 </div>
                 <div>
@@ -363,6 +366,9 @@ export default function TaskManagement() {
                       <option key={u.id} value={u.id}>{u.name} - {u.department}</option>
                     ))}
                   </select>
+                  {standardUsers.length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">No standard users yet. Create users first in User Management.</p>
+                  )}
                 </div>
               )}
             </div>
