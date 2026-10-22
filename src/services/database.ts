@@ -84,11 +84,6 @@ export const UserService = {
     localStorage.setItem(DB_KEYS.USERS, JSON.stringify(filtered));
     return true;
   },
-
-  authenticate(email: string, _password: string): User | null {
-    const user = this.getByEmail(email);
-    return user || null;
-  },
 };
 
 // ============ TASK TEMPLATES ============

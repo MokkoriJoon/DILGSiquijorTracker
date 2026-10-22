@@ -37,10 +37,12 @@ export default function Layout({ children }: LayoutProps) {
         { path: '/tasks', label: 'Task Management', icon: ClipboardList },
         { path: '/users', label: 'User Management', icon: Users },
         { path: '/scheduler', label: 'Scheduler', icon: RefreshCw },
+        { path: '/profile', label: 'My Profile', icon: Shield },
       ]
     : [
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { path: '/my-tasks', label: 'My Tasks', icon: ClipboardList },
+        { path: '/profile', label: 'My Profile', icon: Shield },
       ];
 
   return (

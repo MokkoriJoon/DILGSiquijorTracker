@@ -90,6 +90,13 @@ export default function PublicDashboard() {
                 <Shield className="w-4 h-4" />
                 Staff Login
               </Link>
+              <Link
+                to="/register"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium rounded-lg transition-all border border-white/20"
+              >
+                <Users className="w-4 h-4" />
+                Register
+              </Link>
             </div>
           </div>
         </div>

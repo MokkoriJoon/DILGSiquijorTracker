@@ -5,11 +5,13 @@ import { NotificationProvider } from './context/NotificationContext';
 import Layout from './components/Layout';
 import PublicDashboard from './pages/PublicDashboard';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import AdminDashboard from './pages/AdminDashboard';
 import TaskManagement from './pages/TaskManagement';
 import UserManagement from './pages/UserManagement';
 import MyTasks from './pages/MyTasks';
 import SchedulerPage from './pages/SchedulerPage';
+import Profile from './pages/Profile';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { isAuthenticated, user } = useAuth();
@@ -39,6 +41,9 @@ function AppRoutes() {
       <Route path="/login" element={
         isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />
       } />
+      <Route path="/register" element={
+        isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />
+      } />
       
       {/* Protected routes */}
       <Route path="/dashboard" element={
@@ -64,6 +69,11 @@ function AppRoutes() {
       <Route path="/my-tasks" element={
         <ProtectedRoute allowedRoles={['STANDARD']}>
           <MyTasks />
+        </ProtectedRoute>
+      } />
+      <Route path="/profile" element={
+        <ProtectedRoute>
+          <Profile />
         </ProtectedRoute>
       } />
       

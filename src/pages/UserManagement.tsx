@@ -62,6 +62,8 @@ export default function UserManagement() {
   const [formDepartment, setFormDepartment] = useState('Central Office');
   const [formRole, setFormRole] = useState<Role>('STANDARD');
 
+  const [formPassword, setFormPassword] = useState('');
+
   const handleCreate = () => {
     if (!formName.trim() || !formEmail.trim()) {
       addToast({ type: 'error', title: 'Error', message: 'Name and email are required' });
@@ -74,6 +76,12 @@ export default function UserManagement() {
       return;
     }
 
+    if (!formPassword || formPassword.length < 6) {
+      addToast({ type: 'error', title: 'Error', message: 'Password must be at least 6 characters' });
+      return;
+    }
+
+    // Create user
     UserService.create({
       name: formName,
       email: formEmail,
@@ -81,10 +89,16 @@ export default function UserManagement() {
       role: formRole,
     });
 
+    // Store password hash (using AuthService's hashing)
+    const passwordStore = JSON.parse(localStorage.getItem('dilg_passwords') || '{}');
+    passwordStore[formEmail] = btoa(formPassword + '_dilg_salt_2024');
+    localStorage.setItem('dilg_passwords', JSON.stringify(passwordStore));
+
     loadUsers();
     setShowCreateModal(false);
     setFormName('');
     setFormEmail('');
+    setFormPassword('');
     setFormDepartment('Central Office');
     setFormRole('STANDARD');
     addToast({ type: 'success', title: 'User Created', message: `${formName} has been added` });
@@ -187,7 +201,7 @@ export default function UserManagement() {
                 <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Department</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Role</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Tasks</th>
-                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Joined</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
                 <th className="text-right px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
@@ -217,7 +231,21 @@ export default function UserManagement() {
                       <span className="text-sm text-slate-600">{userTaskCount} tasks</span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-slate-500">{user.createdAt}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-slate-500">{user.createdAt}</span>
+                        {(() => {
+                          const passwordStore = JSON.parse(localStorage.getItem('dilg_passwords') || '{}');
+                          return passwordStore[user.email] ? (
+                            <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded">
+                              Registered
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-bold rounded">
+                              Demo
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -297,6 +325,18 @@ export default function UserManagement() {
                   <option value="STANDARD">Standard User</option>
                   <option value="ADMIN">Admin</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Password *</label>
+                <input
+                  type="password"
+                  value={formPassword}
+                  onChange={(e) => setFormPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder="Minimum 6 characters"
+                  required
+                />
+                <p className="text-xs text-slate-500 mt-1">This password will be used to log in</p>
               </div>
             </div>
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">

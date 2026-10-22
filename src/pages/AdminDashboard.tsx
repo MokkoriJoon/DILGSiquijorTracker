@@ -5,11 +5,11 @@ import {
 } from 'recharts';
 import {
   CheckCircle2, Clock, AlertTriangle, TrendingUp, Users,
-  ClipboardList, Calendar, ArrowUpRight, Zap
+  ClipboardList, Calendar, ArrowUpRight, Zap, RotateCcw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
-import { InstanceService, UserService, TemplateService } from '../services/database';
+import { InstanceService, UserService, TemplateService, resetDatabase } from '../services/database';
 import { NotificationService } from '../services/notifications';
 import { runScheduler } from '../services/scheduler';
 import { TaskStatus } from '../types';
@@ -40,6 +40,20 @@ export default function AdminDashboard() {
       title: 'Scheduler Run',
       message: `Generated ${result.generated} new instances. ${result.errors.length} errors.`,
     });
+  };
+
+  const handleResetDatabase = () => {
+    if (confirm('⚠️ This will reset ALL data to the original demo state. All registered users, tasks, and files will be deleted. Are you sure?')) {
+      resetDatabase();
+      // Clear passwords
+      localStorage.removeItem('dilg_passwords');
+      refreshData();
+      addToast({
+        type: 'info',
+        title: 'Database Reset',
+        message: 'All data has been restored to demo defaults',
+      });
+    }
   };
 
   const kanbanColumns: { status: TaskStatus; label: string; color: string; bgColor: string }[] = [
@@ -87,7 +101,15 @@ export default function AdminDashboard() {
               Here's what's happening across all departments today.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={handleResetDatabase}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-100 text-sm font-medium rounded-lg transition-all border border-red-400/30"
+              title="Reset all data to demo defaults"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset DB
+            </button>
             <button
               onClick={handleRunScheduler}
               className="inline-flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded-lg transition-all border border-white/20"
