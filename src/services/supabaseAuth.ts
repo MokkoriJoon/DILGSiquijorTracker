@@ -28,20 +28,44 @@ export const supabaseAuthService = {
       console.log('[Auth] Starting registration for:', email);
       
       // Check if this is the first user (will become ADMIN)
-      const { count, error: countError } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true });
-      
-      if (countError) {
-        console.error('[Auth] Error counting users:', countError);
-        return { success: false, error: `Database error: ${countError.message}` };
+      // Try to count users - if this fails due to RLS, assume first user
+      let isFirstUser = true;
+      try {
+        const { count, error: countError } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true });
+        
+        if (countError) {
+          // Log the full error object for debugging
+          console.error('[Auth] Error counting users:', JSON.stringify(countError));
+          console.error('[Auth] Error details:', {
+            message: countError.message,
+            details: countError.details,
+            hint: countError.hint,
+            code: countError.code,
+          });
+          
+          // If RLS is blocking, assume first user (will be ADMIN)
+          // This allows registration to proceed even if SELECT is blocked
+          if (countError.code === '42501' || countError.code === 'PGRST301' || !countError.message) {
+            console.warn('[Auth] RLS may be blocking SELECT. Assuming first user (ADMIN).');
+            console.warn('[Auth] Please run the RLS fix SQL from DEBUGGING_SUPABASE.md');
+            isFirstUser = true;
+          } else {
+            return { success: false, error: `Database error: ${countError.message || 'Unknown error'}` };
+          }
+        } else {
+          console.log('[Auth] Current user count:', count);
+          isFirstUser = count === 0;
+        }
+      } catch (countException) {
+        console.error('[Auth] Exception counting users:', countException);
+        console.warn('[Auth] Assuming first user due to count error');
+        isFirstUser = true;
       }
       
-      console.log('[Auth] Current user count:', count);
-      
-      const isFirstUser = count === 0;
       const role = isFirstUser ? 'ADMIN' : 'STANDARD';
-      console.log('[Auth] Assigning role:', role);
+      console.log('[Auth] Assigning role:', role, '| isFirstUser:', isFirstUser);
 
       // Create user in Supabase Auth
       console.log('[Auth] Creating auth user...');
@@ -84,14 +108,34 @@ export const supabaseAuthService = {
         .single();
 
       if (profileError) {
-        console.error('[Auth] Profile insert error:', profileError);
+        console.error('[Auth] Profile insert error:', JSON.stringify(profileError));
+        console.error('[Auth] Profile error details:', {
+          message: profileError.message,
+          details: profileError.details,
+          hint: profileError.hint,
+          code: profileError.code,
+        });
+        
         // Try to clean up auth user if profile creation fails
         try {
           await supabase.auth.admin.deleteUser(authData.user.id);
         } catch (cleanupError) {
           console.error('[Auth] Cleanup error:', cleanupError);
         }
-        return { success: false, error: `Profile creation failed: ${profileError.message}` };
+        
+        // Provide helpful error messages based on error code
+        let errorMessage = profileError.message || 'Unknown error';
+        if (profileError.code === '42501' || profileError.code === 'PGRST301') {
+          errorMessage = 'RLS policy is blocking INSERT. Please run the RLS fix SQL from DEBUGGING_SUPABASE.md';
+        } else if (profileError.code === '23505') {
+          errorMessage = 'A user with this email already exists';
+        } else if (profileError.code === '23503') {
+          errorMessage = 'Foreign key constraint failed. Check if users table exists';
+        } else if (profileError.code === '42P01') {
+          errorMessage = 'Users table does not exist. Please run the database migration SQL';
+        }
+        
+        return { success: false, error: `Profile creation failed: ${errorMessage}` };
       }
 
       console.log('[Auth] User profile created successfully:', profileData.id);
