@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { AuthService } from '../services/auth';
-import { UserService } from '../services/database';
+import { supabase } from '../lib/supabase';
 import { Building2, UserPlus, Eye, EyeOff, ArrowLeft, AlertCircle, Shield } from 'lucide-react';
 import { Role } from '../types';
 import { DEPARTMENTS } from '../data/mockData';
 
 export default function Register() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { register } = useAuth();
   
   const [isFirstUser, setIsFirstUser] = useState(true);
   const [formData, setFormData] = useState({
@@ -28,8 +27,15 @@ export default function Register() {
 
   useEffect(() => {
     // Check if this is the first user (will become admin)
-    setIsFirstUser(UserService.getAll().length === 0);
+    checkFirstUser();
   }, []);
+
+  async function checkFirstUser() {
+    const { count } = await supabase
+      .from('users')
+      .select('*', { count: 'exact', head: true });
+    setIsFirstUser(count === 0);
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({
@@ -42,7 +48,8 @@ export default function Register() {
   const validateForm = (): string | null => {
     if (!formData.name.trim()) return 'Name is required';
     if (!formData.email.trim()) return 'Email is required';
-    if (!AuthService.isValidEmail(formData.email)) return 'Invalid email format';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) return 'Invalid email format';
     if (!formData.password) return 'Password is required';
     if (formData.password.length < 6) return 'Password must be at least 6 characters';
     if (formData.password !== formData.confirmPassword) return 'Passwords do not match';
@@ -63,36 +70,32 @@ export default function Register() {
 
     setLoading(true);
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
+    try {
+      // Register user - first user automatically becomes ADMIN
+      const role = isFirstUser ? 'ADMIN' : (formData.role === 'ADMIN' ? 'ADMIN' : 'STANDARD');
+      const result = await register(
+        formData.email,
+        formData.password,
+        formData.name,
+        formData.department,
+        role
+      );
 
-    // Register user
-    const result = AuthService.register({
-      name: formData.name,
-      email: formData.email,
-      password: formData.password,
-      department: formData.department,
-      role: formData.role,
-    });
-
-    if (result.success && result.user) {
-      // Auto-login after registration
-      const loginResult = login(formData.email, formData.password);
-      if (loginResult.success) {
-        if (result.isFirstAdmin) {
+      if (result.success) {
+        if (isFirstUser) {
           // First admin - show welcome message and redirect to dashboard
           navigate('/dashboard?welcome=admin');
         } else {
           navigate('/dashboard');
         }
       } else {
-        setError('Registration successful but login failed. Please try logging in.');
+        setError(result.error || 'Registration failed');
       }
-    } else {
-      setError(result.error || 'Registration failed');
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (

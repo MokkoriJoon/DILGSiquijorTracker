@@ -17,16 +17,18 @@ export default function Login() {
     setError('');
     setLoading(true);
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    const result = login(email, password);
-    if (result.success) {
-      navigate('/dashboard');
-    } else {
-      setError(result.error || 'Invalid credentials. Please try again.');
+    try {
+      const result = await login(email, password);
+      if (result.success) {
+        navigate('/dashboard');
+      } else {
+        setError(result.error || 'Invalid credentials. Please try again.');
+      }
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

@@ -14,35 +14,47 @@ import SchedulerPage from './pages/SchedulerPage';
 import Profile from './pages/Profile';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
-  const { isAuthenticated, user } = useAuth();
+  const { user, loading } = useAuth();
   
-  if (!isAuthenticated) {
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    </div>;
+  }
+  
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
   
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to="/dashboard" replace />;
   }
   
   return (
-    <NotificationProvider userId={user?.id}>
+    <NotificationProvider userId={user.id}>
       <Layout>{children}</Layout>
     </NotificationProvider>
   );
 }
 
 function AppRoutes() {
-  const { isAuthenticated } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    </div>;
+  }
 
   return (
     <Routes>
       {/* Public routes */}
       <Route path="/" element={<PublicDashboard />} />
       <Route path="/login" element={
-        isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />
+        user ? <Navigate to="/dashboard" replace /> : <Login />
       } />
       <Route path="/register" element={
-        isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />
+        user ? <Navigate to="/dashboard" replace /> : <Register />
       } />
       
       {/* Protected routes */}

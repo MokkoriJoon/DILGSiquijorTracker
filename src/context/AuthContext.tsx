@@ -1,50 +1,90 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { User } from '../types';
-import { initializeDatabase } from '../services/database';
-import { AuthService } from '../services/auth';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabaseAuthService } from '../services/supabaseAuth';
+import type { User } from '../types';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => { success: boolean; error?: string };
-  logout: () => void;
-  isAuthenticated: boolean;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (
+    email: string,
+    password: string,
+    fullName: string,
+    department: string,
+    role?: 'ADMIN' | 'STANDARD'
+  ) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // Check for existing session on mount
   useEffect(() => {
-    // Initialize database on first load
-    initializeDatabase();
-    
-    // Check for existing session
-    const savedUserId = sessionStorage.getItem('dilg_current_user');
-    if (savedUserId) {
-      const allUsers = AuthService.getAllUsers();
-      const foundUser = allUsers.find(u => u.id === savedUserId);
-      if (foundUser) setUser(foundUser);
-    }
+    checkUser();
   }, []);
 
-  const login = (email: string, password: string): { success: boolean; error?: string } => {
-    const result = AuthService.login(email, password);
+  async function checkUser() {
+    try {
+      const currentUser = await supabaseAuthService.getCurrentUser();
+      setUser(currentUser);
+    } catch (error) {
+      console.error('Error checking user:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function login(email: string, password: string) {
+    const result = await supabaseAuthService.login(email, password);
     if (result.success && result.user) {
       setUser(result.user);
-      sessionStorage.setItem('dilg_current_user', result.user.id);
-      return { success: true };
     }
-    return { success: false, error: result.error };
-  };
+    return { success: result.success, error: result.error };
+  }
 
-  const logout = () => {
+  async function register(
+    email: string,
+    password: string,
+    fullName: string,
+    department: string,
+    role: 'ADMIN' | 'STANDARD' = 'STANDARD'
+  ) {
+    const result = await supabaseAuthService.register(email, password, fullName, department, role);
+    if (result.success && result.user) {
+      setUser(result.user);
+    }
+    return { success: result.success, error: result.error };
+  }
+
+  async function logout() {
+    await supabaseAuthService.logout();
     setUser(null);
-    sessionStorage.removeItem('dilg_current_user');
-  };
+  }
+
+  async function updatePassword(newPassword: string) {
+    return await supabaseAuthService.updatePassword(newPassword);
+  }
+
+  const isAdmin = user?.role === 'ADMIN';
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        updatePassword,
+        isAdmin,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
