@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { AuthService } from '../services/auth';
-import { UserService } from '../services/database';
+import { supabase } from '../lib/supabase';
 import { Building2, UserPlus, Eye, EyeOff, ArrowLeft, AlertCircle, Shield } from 'lucide-react';
-import { Role } from '../types';
 import { DEPARTMENTS } from '../data/mockData';
 
 export default function Register() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { register } = useAuth();
   
   const [isFirstUser, setIsFirstUser] = useState(true);
   const [formData, setFormData] = useState({
@@ -18,7 +16,6 @@ export default function Register() {
     password: '',
     confirmPassword: '',
     department: DEPARTMENTS[0],
-    role: 'STANDARD' as Role,
   });
   
   const [showPassword, setShowPassword] = useState(false);
@@ -27,9 +24,26 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Check if this is the first user (will become admin)
-    setIsFirstUser(UserService.getAll().length === 0);
+    // Check if this is the first user in Supabase (will become admin)
+    checkFirstUser();
   }, []);
+
+  async function checkFirstUser() {
+    try {
+      const { count, error } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true });
+      
+      if (error) {
+        console.error('Error checking first user:', error);
+        return;
+      }
+      
+      setIsFirstUser(count === 0);
+    } catch (err) {
+      console.error('Error in checkFirstUser:', err);
+    }
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({
@@ -42,7 +56,8 @@ export default function Register() {
   const validateForm = (): string | null => {
     if (!formData.name.trim()) return 'Name is required';
     if (!formData.email.trim()) return 'Email is required';
-    if (!AuthService.isValidEmail(formData.email)) return 'Invalid email format';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) return 'Invalid email format';
     if (!formData.password) return 'Password is required';
     if (formData.password.length < 6) return 'Password must be at least 6 characters';
     if (formData.password !== formData.confirmPassword) return 'Passwords do not match';
@@ -63,36 +78,30 @@ export default function Register() {
 
     setLoading(true);
 
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
+    try {
+      // Register user - all new users are STANDARD, first user automatically becomes ADMIN
+      const result = await register(
+        formData.email,
+        formData.password,
+        formData.name,
+        formData.department
+      );
 
-    // Register user
-    const result = AuthService.register({
-      name: formData.name,
-      email: formData.email,
-      password: formData.password,
-      department: formData.department,
-      role: formData.role,
-    });
-
-    if (result.success && result.user) {
-      // Auto-login after registration
-      const loginResult = login(formData.email, formData.password);
-      if (loginResult.success) {
-        if (result.isFirstAdmin) {
+      if (result.success) {
+        if (isFirstUser) {
           // First admin - show welcome message and redirect to dashboard
           navigate('/dashboard?welcome=admin');
         } else {
           navigate('/dashboard');
         }
       } else {
-        setError('Registration successful but login failed. Please try logging in.');
+        setError(result.error || 'Registration failed');
       }
-    } else {
-      setError(result.error || 'Registration failed');
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
@@ -241,22 +250,10 @@ export default function Register() {
                 </div>
               </div>
             ) : (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Role *
-                </label>
-                <select
-                  name="role"
-                  value={formData.role}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
-                  required
-                >
-                  <option value="STANDARD">Standard User</option>
-                  <option value="ADMIN">Admin</option>
-                </select>
-                <p className="text-xs text-slate-500 mt-1">
-                  Standard users can view and update their assigned tasks. Admins can manage all tasks and users.
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs text-blue-700">
+                  <strong>Note:</strong> All new accounts are created as <strong>Standard Users</strong>. 
+                  Admins can upgrade user roles from the User Management page.
                 </p>
               </div>
             )}
