@@ -20,11 +20,11 @@ export default function Login() {
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    const success = login(email, password);
-    if (success) {
+    const result = login(email, password);
+    if (result.success) {
       navigate('/dashboard');
     } else {
-      setError('Invalid credentials. Please try again.');
+      setError(result.error || 'Invalid credentials. Please try again.');
     }
     setLoading(false);
   };
@@ -145,6 +145,16 @@ export default function Login() {
                 <span className="text-blue-600 font-medium">Click to fill</span>
               </button>
             </div>
+          </div>
+
+          {/* Register link */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-slate-600">
+              Don't have an account?{' '}
+              <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
+                Register here
+              </Link>
+            </p>
           </div>
         </div>
 
