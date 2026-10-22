@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
+import { UserService } from '../services/database';
 import { Building2, UserPlus, Eye, EyeOff, ArrowLeft, AlertCircle, Shield } from 'lucide-react';
 import { DEPARTMENTS } from '../data/mockData';
 
@@ -25,15 +25,8 @@ export default function Register() {
 
   useEffect(() => {
     // Check if this is the first user (will become admin)
-    checkFirstUser();
+    setIsFirstUser(UserService.getAll().length === 0);
   }, []);
-
-  async function checkFirstUser() {
-    const { count } = await supabase
-      .from('users')
-      .select('*', { count: 'exact', head: true });
-    setIsFirstUser(count === 0);
-  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({
