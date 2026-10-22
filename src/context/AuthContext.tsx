@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AuthService } from '../services/auth';
-import { UserService, initializeDatabase } from '../services/database';
+import { supabaseAuthService } from '../services/supabaseAuth';
 import type { User } from '../types';
 
 interface AuthContextType {
@@ -23,22 +22,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize database and check for existing session on mount
+  // Check for existing Supabase session on mount
   useEffect(() => {
-    initializeDatabase();
     checkUser();
   }, []);
 
-  function checkUser() {
+  async function checkUser() {
     try {
-      // Check sessionStorage for current user
-      const savedUserId = sessionStorage.getItem('dilg_current_user');
-      if (savedUserId) {
-        const foundUser = UserService.getById(savedUserId);
-        if (foundUser) {
-          setUser(foundUser);
-        }
-      }
+      const currentUser = await supabaseAuthService.getCurrentUser();
+      setUser(currentUser);
     } catch (error) {
       console.error('Error checking user:', error);
     } finally {
@@ -47,10 +39,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function login(email: string, password: string) {
-    const result = AuthService.login(email, password);
+    const result = await supabaseAuthService.login(email, password);
     if (result.success && result.user) {
       setUser(result.user);
-      sessionStorage.setItem('dilg_current_user', result.user.id);
     }
     return { success: result.success, error: result.error };
   }
@@ -61,28 +52,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fullName: string,
     department: string
   ) {
-    // Check if this is the first user (will become ADMIN)
-    const isFirstUser = UserService.getAll().length === 0;
-    const role = isFirstUser ? 'ADMIN' : 'STANDARD';
-
-    const result = AuthService.register({
-      name: fullName,
-      email,
-      password,
-      department,
-      role,
-    });
-
+    const result = await supabaseAuthService.register(email, password, fullName, department);
     if (result.success && result.user) {
       setUser(result.user);
-      sessionStorage.setItem('dilg_current_user', result.user.id);
     }
-    return { success: result.success, error: result.error, isFirstAdmin: isFirstUser };
+    return { 
+      success: result.success, 
+      error: result.error,
+      isFirstAdmin: result.isFirstAdmin 
+    };
   }
 
   async function logout() {
+    await supabaseAuthService.logout();
     setUser(null);
-    sessionStorage.removeItem('dilg_current_user');
   }
 
   const isAdmin = user?.role === 'ADMIN';

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { UserService } from '../services/database';
+import { supabase } from '../lib/supabase';
 import { Building2, UserPlus, Eye, EyeOff, ArrowLeft, AlertCircle, Shield } from 'lucide-react';
 import { DEPARTMENTS } from '../data/mockData';
 
@@ -24,9 +24,26 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Check if this is the first user (will become admin)
-    setIsFirstUser(UserService.getAll().length === 0);
+    // Check if this is the first user in Supabase (will become admin)
+    checkFirstUser();
   }, []);
+
+  async function checkFirstUser() {
+    try {
+      const { count, error } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true });
+      
+      if (error) {
+        console.error('Error checking first user:', error);
+        return;
+      }
+      
+      setIsFirstUser(count === 0);
+    } catch (err) {
+      console.error('Error in checkFirstUser:', err);
+    }
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({

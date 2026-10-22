@@ -4,32 +4,26 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Helper function to check if Supabase is configured
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
-
-// Lazy-initialized Supabase client (only created when needed)
-let supabaseInstance: SupabaseClient | null = null;
-
-export function getSupabase(): SupabaseClient | null {
-  if (!isSupabaseConfigured) {
-    return null;
-  }
-  
-  if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-      },
-    });
-  }
-  
-  return supabaseInstance;
+// Throw error if environment variables are missing
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing Supabase environment variables. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.'
+  );
 }
 
-// For backward compatibility - but prefer using getSupabase()
-export const supabase = getSupabase();
+// Create Supabase client immediately (required for production)
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+});
+
+// Helper function for backward compatibility
+export function getSupabase(): SupabaseClient {
+  return supabase;
+}
 
 // Type definitions for Supabase responses
 export interface SupabaseUser {
