@@ -52,14 +52,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     fullName: string,
-    department: string,
-    role: 'ADMIN' | 'STANDARD' = 'STANDARD'
+    department: string
   ) {
-    const result = await supabaseAuthService.register(email, password, fullName, department, role);
+    // All new registrations are STANDARD users
+    // First user automatically becomes ADMIN (handled in supabaseAuth)
+    const result = await supabaseAuthService.register(email, password, fullName, department);
     if (result.success && result.user) {
       setUser(result.user);
     }
-    return { success: result.success, error: result.error };
+    return { success: result.success, error: result.error, isFirstAdmin: result.isFirstAdmin };
   }
 
   async function logout() {

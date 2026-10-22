@@ -5,6 +5,7 @@ export interface AuthResponse {
   success: boolean;
   user?: User;
   error?: string;
+  isFirstAdmin?: boolean;
 }
 
 /**
@@ -14,15 +15,24 @@ export interface AuthResponse {
 export const supabaseAuthService = {
   /**
    * Register a new user with Supabase Auth
+   * All new users are STANDARD by default
+   * First user to register automatically becomes ADMIN
    */
   async register(
     email: string,
     password: string,
     fullName: string,
-    department: string,
-    role: 'ADMIN' | 'STANDARD' = 'STANDARD'
+    department: string
   ): Promise<AuthResponse> {
     try {
+      // Check if this is the first user (will become ADMIN)
+      const { count } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true });
+      
+      const isFirstUser = count === 0;
+      const role = isFirstUser ? 'ADMIN' : 'STANDARD';
+
       // Create user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
@@ -73,6 +83,7 @@ export const supabaseAuthService = {
           role: profileData.role,
           createdAt: profileData.created_at,
         },
+        isFirstAdmin: isFirstUser,
       };
     } catch (error) {
       return {

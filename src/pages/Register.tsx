@@ -3,7 +3,6 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Building2, UserPlus, Eye, EyeOff, ArrowLeft, AlertCircle, Shield } from 'lucide-react';
-import { Role } from '../types';
 import { DEPARTMENTS } from '../data/mockData';
 
 export default function Register() {
@@ -17,7 +16,6 @@ export default function Register() {
     password: '',
     confirmPassword: '',
     department: DEPARTMENTS[0],
-    role: 'STANDARD' as Role,
   });
   
   const [showPassword, setShowPassword] = useState(false);
@@ -71,14 +69,12 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // Register user - first user automatically becomes ADMIN
-      const role = isFirstUser ? 'ADMIN' : (formData.role === 'ADMIN' ? 'ADMIN' : 'STANDARD');
+      // Register user - all new users are STANDARD, first user automatically becomes ADMIN
       const result = await register(
         formData.email,
         formData.password,
         formData.name,
-        formData.department,
-        role
+        formData.department
       );
 
       if (result.success) {
@@ -244,22 +240,10 @@ export default function Register() {
                 </div>
               </div>
             ) : (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Role *
-                </label>
-                <select
-                  name="role"
-                  value={formData.role}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
-                  required
-                >
-                  <option value="STANDARD">Standard User</option>
-                  <option value="ADMIN">Admin</option>
-                </select>
-                <p className="text-xs text-slate-500 mt-1">
-                  Standard users can view and update their assigned tasks. Admins can manage all tasks and users.
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs text-blue-700">
+                  <strong>Note:</strong> All new accounts are created as <strong>Standard Users</strong>. 
+                  Admins can upgrade user roles from the User Management page.
                 </p>
               </div>
             )}
