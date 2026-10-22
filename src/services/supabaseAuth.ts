@@ -28,31 +28,50 @@ export const supabaseAuthService = {
       console.log('[Auth] Starting registration for:', email);
       
       // Check if this is the first user (will become ADMIN)
-      // Try to count users - if this fails due to RLS, assume first user
-      let isFirstUser = true;
+      // Use a simple approach that avoids infinite recursion
+      let isFirstUser = false;
+      let role: 'ADMIN' | 'STANDARD' = 'STANDARD';
+      
       try {
+        // Try direct count with minimal columns
         const { count, error: countError } = await supabase
           .from('users')
-          .select('*', { count: 'exact', head: true });
+          .select('id', { count: 'exact', head: true });
         
         if (countError) {
-          // Log the full error object for debugging
-          console.error('[Auth] Error counting users:', JSON.stringify(countError));
-          console.error('[Auth] Error details:', {
+          console.error('[Auth] Count error details:', {
             message: countError.message,
+            code: countError.code,
             details: countError.details,
             hint: countError.hint,
-            code: countError.code,
           });
           
-          // If RLS is blocking, assume first user (will be ADMIN)
-          // This allows registration to proceed even if SELECT is blocked
-          if (countError.code === '42501' || countError.code === 'PGRST301' || !countError.message) {
-            console.warn('[Auth] RLS may be blocking SELECT. Assuming first user (ADMIN).');
-            console.warn('[Auth] Please run the RLS fix SQL from DEBUGGING_SUPABASE.md');
-            isFirstUser = true;
+          // If infinite recursion or RLS error, check if ANY users exist via auth
+          if (countError.message?.includes('infinite recursion') || 
+              countError.code === '42501' || 
+              countError.code === 'PGRST301') {
+            console.warn('[Auth] Recursion/RLS detected. Checking via auth.admin...');
+            
+            // Try to list users via auth admin (requires service role, might fail)
+            try {
+              const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+              if (!authError && authData?.users) {
+                isFirstUser = authData.users.length === 0;
+                console.log('[Auth] Found', authData.users.length, 'auth users');
+              } else {
+                // If we can't determine, assume first user for safety
+                isFirstUser = true;
+                console.warn('[Auth] Cannot determine user count. Assuming first user.');
+              }
+            } catch (adminError) {
+              console.error('[Auth] Admin check failed:', adminError);
+              isFirstUser = true;
+            }
           } else {
-            return { success: false, error: `Database error: ${countError.message || 'Unknown error'}` };
+            return { 
+              success: false, 
+              error: `Database error: ${countError.message || 'Unknown error'}. Check RLS policies.` 
+            };
           }
         } else {
           console.log('[Auth] Current user count:', count);
@@ -60,11 +79,11 @@ export const supabaseAuthService = {
         }
       } catch (countException) {
         console.error('[Auth] Exception counting users:', countException);
-        console.warn('[Auth] Assuming first user due to count error');
+        console.warn('[Auth] Assuming first user due to exception');
         isFirstUser = true;
       }
       
-      const role = isFirstUser ? 'ADMIN' : 'STANDARD';
+      role = isFirstUser ? 'ADMIN' : 'STANDARD';
       console.log('[Auth] Assigning role:', role, '| isFirstUser:', isFirstUser);
 
       // Create user in Supabase Auth
@@ -94,16 +113,20 @@ export const supabaseAuthService = {
       console.log('[Auth] Auth user created:', authData.user.id);
 
       // Insert user profile into database
+      // Use upsert with onConflict to handle case where trigger already created the profile
       console.log('[Auth] Inserting user profile into database...');
       const { data: profileData, error: profileError } = await supabase
         .from('users')
-        .insert({
-          id: authData.user.id,
-          email,
-          name: fullName,
-          department,
-          role,
-        })
+        .upsert(
+          {
+            id: authData.user.id,
+            email,
+            name: fullName,
+            department,
+            role,
+          },
+          { onConflict: 'id', ignoreDuplicates: false }
+        )
         .select()
         .single();
 
@@ -116,16 +139,58 @@ export const supabaseAuthService = {
           code: profileError.code,
         });
         
-        // Try to clean up auth user if profile creation fails
-        try {
-          await supabase.auth.admin.deleteUser(authData.user.id);
-        } catch (cleanupError) {
-          console.error('[Auth] Cleanup error:', cleanupError);
+        // Check if it's a recursion error
+        const isRecursionError = profileError.message?.includes('infinite recursion');
+        
+        if (isRecursionError) {
+          console.error('[Auth] ⚠️ INFINITE RECURSION DETECTED!');
+          console.error('[Auth] This is caused by a trigger on the users table.');
+          console.error('[Auth] Trying to fetch existing profile...');
+          
+          // Try to fetch the profile that might have been created by the trigger
+          try {
+            const { data: existingProfile, error: fetchError } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', authData.user.id)
+              .single();
+            
+            if (!fetchError && existingProfile) {
+              console.log('[Auth] ✅ Profile exists (created by trigger). Using it.');
+              return {
+                success: true,
+                user: {
+                  id: existingProfile.id,
+                  email: existingProfile.email,
+                  name: existingProfile.name,
+                  department: existingProfile.department,
+                  role: existingProfile.role,
+                  createdAt: existingProfile.created_at,
+                },
+                isFirstAdmin: isFirstUser,
+              };
+            }
+          } catch (fetchError) {
+            console.error('[Auth] Could not fetch existing profile:', fetchError);
+          }
+          
+          console.error('[Auth] Please run the SQL fix from QUICK_FIX_RLS.md');
+        }
+        
+        // Try to clean up auth user if profile creation fails (but not for recursion)
+        if (!isRecursionError) {
+          try {
+            await supabase.auth.admin.deleteUser(authData.user.id);
+          } catch (cleanupError) {
+            console.error('[Auth] Cleanup error:', cleanupError);
+          }
         }
         
         // Provide helpful error messages based on error code
         let errorMessage = profileError.message || 'Unknown error';
-        if (profileError.code === '42501' || profileError.code === 'PGRST301') {
+        if (isRecursionError) {
+          errorMessage = 'Infinite recursion detected. A trigger on the users table is causing a loop. Run the SQL fix from QUICK_FIX_RLS.md to disable the problematic trigger.';
+        } else if (profileError.code === '42501' || profileError.code === 'PGRST301') {
           errorMessage = 'RLS policy is blocking INSERT. Please run the RLS fix SQL from DEBUGGING_SUPABASE.md';
         } else if (profileError.code === '23505') {
           errorMessage = 'A user with this email already exists';
