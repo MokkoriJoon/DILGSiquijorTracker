@@ -35,13 +35,21 @@ export default function Register() {
         .select('*', { count: 'exact', head: true });
       
       if (error) {
-        console.error('Error checking first user:', error);
+        console.error('[Register] Error checking first user:', JSON.stringify(error));
+        // If RLS is blocking, assume first user (will show admin message)
+        if (error.code === '42501' || error.code === 'PGRST301' || !error.message) {
+          console.warn('[Register] RLS may be blocking. Assuming first user.');
+          setIsFirstUser(true);
+        }
         return;
       }
       
+      console.log('[Register] User count:', count);
       setIsFirstUser(count === 0);
     } catch (err) {
-      console.error('Error in checkFirstUser:', err);
+      console.error('[Register] Exception in checkFirstUser:', err);
+      // Assume first user on error
+      setIsFirstUser(true);
     }
   }
 
