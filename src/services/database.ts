@@ -25,11 +25,17 @@ const DB_KEYS = {
 export function initializeDatabase(): void {
   const isInitialized = localStorage.getItem(DB_KEYS.INITIALIZED);
   if (!isInitialized) {
-    localStorage.setItem(DB_KEYS.USERS, JSON.stringify(mockUsers));
-    localStorage.setItem(DB_KEYS.TEMPLATES, JSON.stringify(mockTaskTemplates));
-    localStorage.setItem(DB_KEYS.INSTANCES, JSON.stringify(mockTaskInstances));
+    // Clean system - start with empty data
+    localStorage.setItem(DB_KEYS.USERS, JSON.stringify([]));
+    localStorage.setItem(DB_KEYS.TEMPLATES, JSON.stringify([]));
+    localStorage.setItem(DB_KEYS.INSTANCES, JSON.stringify([]));
     localStorage.setItem(DB_KEYS.INITIALIZED, 'true');
   }
+}
+
+export function isFirstUser(): boolean {
+  const users = UserService.getAll();
+  return users.length === 0;
 }
 
 export function resetDatabase(): void {

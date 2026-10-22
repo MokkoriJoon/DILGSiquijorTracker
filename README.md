@@ -1,8 +1,8 @@
-# 🏛️ DILG Tracker
+# 🏛️ DILG Siquijor Task Tracker
 
-**Department of the Interior and Local Government — Task & Program Tracker**
+**DILG Region NIR • Siquijor Provincial Office — Task & Program Tracker**
 
-A comprehensive web application for monitoring departmental programs, managing recurring tasks, and tracking performance across all DILG regional and provincial offices in the Philippines.
+A comprehensive web application for monitoring departmental programs, managing recurring tasks, and tracking performance across DILG Siquijor Provincial Office and all municipalities in Siquijor Province, Negros Island Region (NIR).
 
 ![Status](https://img.shields.io/badge/status-production--ready-green)
 ![License](https://img.shields.io/badge/license-Government-blue)
@@ -127,12 +127,20 @@ npm run dev
 # Open http://localhost:5173
 ```
 
-### Demo Credentials
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@dilg.gov.ph | any |
-| User | juan.cruz@dilg.gov.ph | any |
-| User | ana.reyes@dilg.gov.ph | any |
+### Getting Started (Clean System)
+
+The system starts completely clean with no pre-seeded data.
+
+1. **First user to register becomes ADMIN automatically**
+2. Go to `/register` → Create your admin account
+3. After login, create additional users in User Management
+4. Create task templates and assign to users
+5. Monitor progress on the dashboard
+
+**Municipalities served:**
+- DILG Siquijor Provincial Office
+- Municipality of Siquijor, Larena, San Juan
+- Municipality of Enrique Villanueva, Maria, Lazi
 
 ---
 

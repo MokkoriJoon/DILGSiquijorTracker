@@ -37,11 +37,13 @@ export interface RegisterResult {
   success: boolean;
   user?: User;
   error?: string;
+  isFirstAdmin?: boolean;
 }
 
 export const AuthService = {
   /**
    * Register a new user
+   * First user to register automatically becomes ADMIN
    */
   register(data: RegisterData): RegisterResult {
     // Validate input
@@ -67,6 +69,10 @@ export const AuthService = {
       return { success: false, error: 'An account with this email already exists' };
     }
 
+    // First user automatically becomes ADMIN
+    const isFirstUser = UserService.getAll().length === 0;
+    const assignedRole = isFirstUser ? 'ADMIN' : data.role;
+
     // Create user with hashed password
     const hashedPassword = hashPassword(data.password);
     
@@ -79,11 +85,11 @@ export const AuthService = {
     const newUser = UserService.create({
       name: data.name,
       email: data.email,
-      role: data.role,
+      role: assignedRole,
       department: data.department,
     });
 
-    return { success: true, user: newUser };
+    return { success: true, user: newUser, isFirstAdmin: isFirstUser };
   },
 
   /**
