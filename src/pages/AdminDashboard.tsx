@@ -1,27 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, AreaChart, Area
+  AreaChart, Area
 } from 'recharts';
 import {
   CheckCircle2, Clock, AlertTriangle, TrendingUp, Users,
-  ClipboardList, Calendar, ArrowUpRight, Filter, Search
+  ClipboardList, Calendar, ArrowUpRight, Zap
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { mockTaskInstances, departmentStats, monthlyCompletionData, categoryData } from '../data/mockData';
+import { useNotifications } from '../context/NotificationContext';
+import { InstanceService, UserService, TemplateService } from '../services/database';
+import { NotificationService } from '../services/notifications';
+import { runScheduler } from '../services/scheduler';
 import { TaskStatus } from '../types';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { addToast, refreshNotifications } = useNotifications();
   const [viewMode, setViewMode] = useState<'stats' | 'kanban'>('stats');
+  const [stats, setStats] = useState(InstanceService.getStats());
+  const [instances, setInstances] = useState(InstanceService.getAll());
 
-  const totalTasks = mockTaskInstances.length;
-  const completedTasks = mockTaskInstances.filter(t => t.status === 'COMPLETED').length;
-  const inProgressTasks = mockTaskInstances.filter(t => t.status === 'IN_PROGRESS').length;
-  const pendingTasks = mockTaskInstances.filter(t => t.status === 'PENDING').length;
-  const submittedTasks = mockTaskInstances.filter(t => t.status === 'SUBMITTED').length;
-  const overdueTasks = mockTaskInstances.filter(t => t.status === 'OVERDUE').length;
-  const completionRate = Math.round((completedTasks / totalTasks) * 100);
+  useEffect(() => {
+    refreshData();
+  }, []);
+
+  const refreshData = () => {
+    setStats(InstanceService.getStats());
+    setInstances(InstanceService.getAll());
+  };
+
+  const handleRunScheduler = () => {
+    const result = runScheduler();
+    NotificationService.notifySchedulerRun(result.generated, result.errors.length);
+    refreshNotifications();
+    refreshData();
+    addToast({
+      type: result.generated > 0 ? 'success' : 'info',
+      title: 'Scheduler Run',
+      message: `Generated ${result.generated} new instances. ${result.errors.length} errors.`,
+    });
+  };
 
   const kanbanColumns: { status: TaskStatus; label: string; color: string; bgColor: string }[] = [
     { status: 'PENDING', label: 'Pending', color: 'text-slate-600', bgColor: 'bg-slate-100' },
@@ -31,12 +50,31 @@ export default function AdminDashboard() {
     { status: 'OVERDUE', label: 'Overdue', color: 'text-red-600', bgColor: 'bg-red-100' },
   ];
 
-  const stats = [
-    { label: 'Total Tasks', value: totalTasks, icon: ClipboardList, change: '+12%', color: 'from-blue-500 to-blue-600' },
-    { label: 'Completed', value: completedTasks, icon: CheckCircle2, change: '+8%', color: 'from-emerald-500 to-emerald-600' },
-    { label: 'In Progress', value: inProgressTasks, icon: Clock, change: '+3%', color: 'from-amber-500 to-amber-600' },
-    { label: 'Overdue', value: overdueTasks, icon: AlertTriangle, change: '-2%', color: 'from-red-500 to-red-600' },
+  const statCards = [
+    { label: 'Total Tasks', value: stats.total, icon: ClipboardList, change: '+12%', color: 'from-blue-500 to-blue-600' },
+    { label: 'Completed', value: stats.completed, icon: CheckCircle2, change: '+8%', color: 'from-emerald-500 to-emerald-600' },
+    { label: 'In Progress', value: stats.inProgress, icon: Clock, change: '+3%', color: 'from-amber-500 to-amber-600' },
+    { label: 'Overdue', value: stats.overdue, icon: AlertTriangle, change: '-2%', color: 'from-red-500 to-red-600' },
   ];
+
+  // Build chart data from real instances
+  const departmentChartData = () => {
+    const users = UserService.getAll();
+    const deptMap: Record<string, { total: number; completed: number }> = {};
+    
+    instances.forEach(inst => {
+      const assignee = users.find(u => u.id === inst.assignedTo);
+      const dept = assignee?.department || 'Unknown';
+      if (!deptMap[dept]) deptMap[dept] = { total: 0, completed: 0 };
+      deptMap[dept].total++;
+      if (inst.status === 'COMPLETED') deptMap[dept].completed++;
+    });
+
+    return Object.entries(deptMap).map(([name, data]) => ({
+      name: name.replace('Regional Office - ', '').replace('Provincial Office - ', 'Prov. '),
+      completionRate: data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0,
+    }));
+  };
 
   return (
     <div className="space-y-6">
@@ -50,6 +88,13 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={handleRunScheduler}
+              className="inline-flex items-center gap-2 px-3 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded-lg transition-all border border-white/20"
+            >
+              <Zap className="w-4 h-4" />
+              Run Scheduler
+            </button>
             <button
               onClick={() => setViewMode('stats')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -72,7 +117,7 @@ export default function AdminDashboard() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
+        {statCards.map((stat) => (
           <div key={stat.label} className="bg-white rounded-xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
               <div>
@@ -98,25 +143,30 @@ export default function AdminDashboard() {
         <>
           {/* Charts Row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Completion Trend */}
+            {/* Completion Rate */}
             <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-800 mb-4">Monthly Task Completion</h3>
-              <div className="h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={monthlyCompletionData}>
-                    <defs>
-                      <linearGradient id="colorComp" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                    <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                    <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }} />
-                    <Area type="monotone" dataKey="completed" stroke="#10b981" fill="url(#colorComp)" name="Completed" />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <h3 className="text-sm font-semibold text-slate-800 mb-4">Completion Overview</h3>
+              <div className="h-56 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="relative w-32 h-32 mx-auto">
+                    <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+                      <circle cx="60" cy="60" r="50" stroke="#e2e8f0" strokeWidth="10" fill="none" />
+                      <circle
+                        cx="60" cy="60" r="50"
+                        stroke="#10b981"
+                        strokeWidth="10"
+                        fill="none"
+                        strokeDasharray={`${stats.completionRate * 3.14} ${314 - stats.completionRate * 3.14}`}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-2xl font-bold text-slate-800">{stats.completionRate}%</span>
+                    </div>
+                  </div>
+                  <p className="text-sm text-slate-500 mt-3">Overall Completion Rate</p>
+                  <p className="text-xs text-slate-400">{stats.completed} of {stats.total} tasks completed</p>
+                </div>
               </div>
             </div>
 
@@ -125,10 +175,10 @@ export default function AdminDashboard() {
               <h3 className="text-sm font-semibold text-slate-800 mb-4">Department Completion Rates</h3>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={departmentStats} layout="vertical">
+                  <BarChart data={departmentChartData()} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                     <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" domain={[0, 100]} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} stroke="#94a3b8" width={120} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} stroke="#94a3b8" width={100} />
                     <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }} />
                     <Bar dataKey="completionRate" fill="#1e40af" radius={[0, 4, 4, 0]} />
                   </BarChart>
@@ -144,11 +194,11 @@ export default function AdminDashboard() {
               <h3 className="text-sm font-semibold text-slate-800 mb-4">Status Breakdown</h3>
               <div className="space-y-3">
                 {[
-                  { label: 'Pending', count: pendingTasks, color: 'bg-slate-400', total: totalTasks },
-                  { label: 'In Progress', count: inProgressTasks, color: 'bg-blue-500', total: totalTasks },
-                  { label: 'Submitted', count: submittedTasks, color: 'bg-purple-500', total: totalTasks },
-                  { label: 'Completed', count: completedTasks, color: 'bg-emerald-500', total: totalTasks },
-                  { label: 'Overdue', count: overdueTasks, color: 'bg-red-500', total: totalTasks },
+                  { label: 'Pending', count: stats.pending, color: 'bg-slate-400' },
+                  { label: 'In Progress', count: stats.inProgress, color: 'bg-blue-500' },
+                  { label: 'Submitted', count: stats.submitted, color: 'bg-purple-500' },
+                  { label: 'Completed', count: stats.completed, color: 'bg-emerald-500' },
+                  { label: 'Overdue', count: stats.overdue, color: 'bg-red-500' },
                 ].map((item) => (
                   <div key={item.label}>
                     <div className="flex items-center justify-between mb-1">
@@ -158,7 +208,7 @@ export default function AdminDashboard() {
                     <div className="w-full bg-slate-100 rounded-full h-2">
                       <div
                         className={`${item.color} rounded-full h-2 transition-all duration-500`}
-                        style={{ width: `${(item.count / item.total) * 100}%` }}
+                        style={{ width: `${stats.total > 0 ? (item.count / stats.total) * 100 : 0}%` }}
                       />
                     </div>
                   </div>
@@ -171,11 +221,11 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-slate-800">Overdue & At Risk Tasks</h3>
                 <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">
-                  {overdueTasks} overdue
+                  {stats.overdue} overdue
                 </span>
               </div>
               <div className="space-y-2">
-                {mockTaskInstances
+                {instances
                   .filter(t => t.status === 'OVERDUE' || t.status === 'PENDING')
                   .slice(0, 5)
                   .map((task) => (
@@ -195,6 +245,12 @@ export default function AdminDashboard() {
                       </div>
                     </div>
                   ))}
+                {instances.filter(t => t.status === 'OVERDUE' || t.status === 'PENDING').length === 0 && (
+                  <div className="text-center py-6">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                    <p className="text-sm text-slate-500">All tasks are on track!</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -204,7 +260,7 @@ export default function AdminDashboard() {
         <div className="overflow-x-auto">
           <div className="flex gap-4 min-w-max pb-4">
             {kanbanColumns.map((column) => {
-              const tasks = mockTaskInstances.filter(t => t.status === column.status);
+              const tasks = instances.filter(t => t.status === column.status);
               return (
                 <div key={column.status} className="w-72 flex-shrink-0">
                   <div className={`${column.bgColor} rounded-t-xl px-4 py-3 flex items-center justify-between`}>

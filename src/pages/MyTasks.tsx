@@ -1,32 +1,49 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CheckCircle2, Clock, AlertTriangle, FileText, Send,
-  Calendar, Tag, ArrowUpRight, Filter, Search, Upload
+  Calendar, Tag, ArrowUpRight, Upload, Paperclip
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { mockTaskInstances } from '../data/mockData';
+import { useNotifications } from '../context/NotificationContext';
+import { InstanceService, TemplateService, UserService } from '../services/database';
+import { NotificationService } from '../services/notifications';
+import { FileStorageService } from '../services/storage';
+import FileUpload from '../components/FileUpload';
 import { TaskInstance, TaskStatus } from '../types';
 
 export default function MyTasks() {
   const { user } = useAuth();
+  const { addToast, refreshNotifications } = useNotifications();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskInstance | null>(null);
+  const [tasks, setTasks] = useState<TaskInstance[]>([]);
+  const [submitStatus, setSubmitStatus] = useState<string>('IN_PROGRESS');
+  const [submitOutput, setSubmitOutput] = useState('');
 
-  const myTasks = mockTaskInstances.filter(t => t.assignedTo === user?.id);
+  useEffect(() => {
+    loadTasks();
+  }, [user]);
 
-  const filteredTasks = myTasks.filter(t => {
+  const loadTasks = () => {
+    if (user) {
+      const userTasks = InstanceService.getByUser(user.id);
+      setTasks(userTasks);
+    }
+  };
+
+  const filteredTasks = tasks.filter(t => {
     if (filterStatus === 'all') return true;
     return t.status === filterStatus;
   });
 
   const statusCounts = {
-    all: myTasks.length,
-    PENDING: myTasks.filter(t => t.status === 'PENDING').length,
-    IN_PROGRESS: myTasks.filter(t => t.status === 'IN_PROGRESS').length,
-    SUBMITTED: myTasks.filter(t => t.status === 'SUBMITTED').length,
-    COMPLETED: myTasks.filter(t => t.status === 'COMPLETED').length,
-    OVERDUE: myTasks.filter(t => t.status === 'OVERDUE').length,
+    all: tasks.length,
+    PENDING: tasks.filter(t => t.status === 'PENDING').length,
+    IN_PROGRESS: tasks.filter(t => t.status === 'IN_PROGRESS').length,
+    SUBMITTED: tasks.filter(t => t.status === 'SUBMITTED').length,
+    COMPLETED: tasks.filter(t => t.status === 'COMPLETED').length,
+    OVERDUE: tasks.filter(t => t.status === 'OVERDUE').length,
   };
 
   const getStatusConfig = (status: TaskStatus) => {
@@ -53,6 +70,41 @@ export default function MyTasks() {
     }
   };
 
+  const handleStartTask = (task: TaskInstance) => {
+    setSelectedTask(task);
+    setSubmitStatus('IN_PROGRESS');
+    setSubmitOutput('');
+    setShowSubmitModal(true);
+  };
+
+  const handleSubmit = () => {
+    if (!selectedTask) return;
+
+    const newStatus = submitStatus as TaskStatus;
+    InstanceService.updateStatus(selectedTask.id, newStatus, submitOutput || undefined);
+
+    // Create notification
+    if (newStatus === 'COMPLETED') {
+      NotificationService.notifyTaskCompleted(selectedTask.template.title, user?.name || 'Unknown');
+    }
+
+    // Show toast
+    addToast({
+      type: newStatus === 'COMPLETED' ? 'success' : 'info',
+      title: newStatus === 'COMPLETED' ? 'Task Completed!' : 'Task Updated',
+      message: `"${selectedTask.template.title}" marked as ${newStatus.replace('_', ' ').toLowerCase()}`,
+    });
+
+    refreshNotifications();
+    loadTasks();
+    setShowSubmitModal(false);
+    setSelectedTask(null);
+  };
+
+  const getTaskFiles = (taskId: string) => {
+    return FileStorageService.getByTask(taskId);
+  };
+
   return (
     <div className="space-y-6">
       {/* Welcome */}
@@ -61,7 +113,7 @@ export default function MyTasks() {
         <p className="text-blue-100 text-sm mt-1">
           Track and manage your assigned tasks and programs
         </p>
-        <div className="flex gap-4 mt-4">
+        <div className="flex flex-wrap gap-3 mt-4">
           <div className="bg-white/10 rounded-lg px-4 py-2">
             <p className="text-2xl font-bold">{statusCounts.COMPLETED}</p>
             <p className="text-xs text-blue-200">Completed</p>
@@ -104,6 +156,7 @@ export default function MyTasks() {
         {filteredTasks.map((task) => {
           const statusConfig = getStatusConfig(task.status);
           const StatusIcon = statusConfig.icon;
+          const taskFiles = getTaskFiles(task.id);
 
           return (
             <div
@@ -141,6 +194,12 @@ export default function MyTasks() {
                       <FileText className="w-3 h-3" />
                       {task.template.recurrence}
                     </span>
+                    {taskFiles.length > 0 && (
+                      <span className="inline-flex items-center gap-1 text-xs text-blue-600">
+                        <Paperclip className="w-3 h-3" />
+                        {taskFiles.length} file{taskFiles.length > 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
 
                   {task.output && (
@@ -151,11 +210,30 @@ export default function MyTasks() {
                     </div>
                   )}
 
+                  {/* Attached files preview */}
+                  {taskFiles.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {taskFiles.slice(0, 3).map(file => (
+                        <div key={file.id} className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 rounded-md border border-slate-100">
+                          {FileStorageService.isImage(file.type) ? (
+                            <img src={file.dataUrl} alt="" className="w-4 h-4 rounded object-cover" />
+                          ) : (
+                            <FileText className="w-3 h-3 text-slate-400" />
+                          )}
+                          <span className="text-[10px] text-slate-600 truncate max-w-[100px]">{file.name}</span>
+                        </div>
+                      ))}
+                      {taskFiles.length > 3 && (
+                        <span className="text-[10px] text-slate-500 px-2 py-1">+{taskFiles.length - 3} more</span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Action buttons */}
                   <div className="flex gap-2 mt-3">
                     {(task.status === 'PENDING' || task.status === 'OVERDUE') && (
                       <button
-                        onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }}
+                        onClick={() => handleStartTask(task)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors"
                       >
                         <Send className="w-3 h-3" />
@@ -164,7 +242,7 @@ export default function MyTasks() {
                     )}
                     {task.status === 'IN_PROGRESS' && (
                       <button
-                        onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }}
+                        onClick={() => handleStartTask(task)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors"
                       >
                         <Upload className="w-3 h-3" />
@@ -175,6 +253,12 @@ export default function MyTasks() {
                       <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-emerald-600 text-xs font-medium">
                         <CheckCircle2 className="w-3 h-3" />
                         Completed {task.completedAt && `on ${task.completedAt}`}
+                      </span>
+                    )}
+                    {task.status === 'SUBMITTED' && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-purple-600 text-xs font-medium">
+                        <Send className="w-3 h-3" />
+                        Awaiting review
                       </span>
                     )}
                   </div>
@@ -198,15 +282,19 @@ export default function MyTasks() {
       {/* Submit Output Modal */}
       {showSubmitModal && selectedTask && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-200">
-              <h3 className="text-lg font-bold text-slate-800">Submit Task Output</h3>
+              <h3 className="text-lg font-bold text-slate-800">Update Task</h3>
               <p className="text-sm text-slate-500 mt-1">{selectedTask.template.title}</p>
             </div>
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Update Status</label>
-                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                <select
+                  value={submitStatus}
+                  onChange={(e) => setSubmitStatus(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                >
                   <option value="IN_PROGRESS">In Progress</option>
                   <option value="SUBMITTED">Submitted</option>
                   <option value="COMPLETED">Completed</option>
@@ -215,18 +303,19 @@ export default function MyTasks() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Output / Notes</label>
                 <textarea
-                  rows={4}
+                  rows={3}
+                  value={submitOutput}
+                  onChange={(e) => setSubmitOutput(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 resize-none"
                   placeholder="Describe your output or add notes..."
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Attach File (optional)</label>
-                <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors cursor-pointer">
-                  <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                  <p className="text-xs text-slate-500">Click to upload or drag and drop</p>
-                  <p className="text-[10px] text-slate-400 mt-1">PDF, DOCX, XLSX up to 10MB</p>
-                </div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Attach Files</label>
+                <FileUpload
+                  taskId={selectedTask.id}
+                  uploadedBy={user?.id}
+                />
               </div>
             </div>
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
@@ -237,10 +326,10 @@ export default function MyTasks() {
                 Cancel
               </button>
               <button
-                onClick={() => { setShowSubmitModal(false); setSelectedTask(null); }}
+                onClick={handleSubmit}
                 className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
               >
-                Submit
+                {submitStatus === 'COMPLETED' ? 'Mark Complete' : 'Save Update'}
               </button>
             </div>
           </div>

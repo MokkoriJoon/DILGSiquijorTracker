@@ -1,21 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Plus, Search, Filter, Calendar, Users, Clock, Tag,
-  MoreVertical, Edit2, Trash2, Eye, ChevronDown, Repeat
+  Plus, Search, Calendar, Users, Clock, Tag,
+  Edit2, Trash2, Eye, Repeat
 } from 'lucide-react';
-import { mockTaskTemplates, mockTaskInstances, mockUsers } from '../data/mockData';
+import { TemplateService, InstanceService, UserService } from '../services/database';
+import { useNotifications } from '../context/NotificationContext';
+import { NotificationService } from '../services/notifications';
 import { TaskTemplate, RecurrenceType } from '../types';
 
 export default function TaskManagement() {
+  const { addToast, refreshNotifications } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterRecurrence, setFilterRecurrence] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskTemplate | null>(null);
+  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
 
-  const categories = [...new Set(mockTaskTemplates.map(t => t.category))];
+  useEffect(() => {
+    loadTemplates();
+  }, []);
 
-  const filteredTemplates = mockTaskTemplates.filter(t => {
+  const loadTemplates = () => {
+    setTemplates(TemplateService.getAll());
+  };
+
+  const categories = [...new Set(templates.map(t => t.category))];
+
+  const filteredTemplates = templates.filter(t => {
     const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       t.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = filterCategory === 'all' || t.category === filterCategory;
@@ -25,24 +37,17 @@ export default function TaskManagement() {
 
   const getRecurrenceLabel = (recurrence: RecurrenceType) => {
     const labels: Record<RecurrenceType, string> = {
-      ONCE: 'One-time',
-      DAILY: 'Daily',
-      WEEKLY: 'Weekly',
-      MONTHLY: 'Monthly',
-      QUARTERLY: 'Quarterly',
-      YEARLY: 'Yearly',
+      ONCE: 'One-time', DAILY: 'Daily', WEEKLY: 'Weekly',
+      MONTHLY: 'Monthly', QUARTERLY: 'Quarterly', YEARLY: 'Yearly',
     };
     return labels[recurrence];
   };
 
   const getRecurrenceColor = (recurrence: RecurrenceType) => {
     const colors: Record<RecurrenceType, string> = {
-      ONCE: 'bg-slate-100 text-slate-700',
-      DAILY: 'bg-blue-100 text-blue-700',
-      WEEKLY: 'bg-cyan-100 text-cyan-700',
-      MONTHLY: 'bg-purple-100 text-purple-700',
-      QUARTERLY: 'bg-amber-100 text-amber-700',
-      YEARLY: 'bg-emerald-100 text-emerald-700',
+      ONCE: 'bg-slate-100 text-slate-700', DAILY: 'bg-blue-100 text-blue-700',
+      WEEKLY: 'bg-cyan-100 text-cyan-700', MONTHLY: 'bg-purple-100 text-purple-700',
+      QUARTERLY: 'bg-amber-100 text-amber-700', YEARLY: 'bg-emerald-100 text-emerald-700',
     };
     return colors[recurrence];
   };
@@ -56,6 +61,79 @@ export default function TaskManagement() {
     }
   };
 
+  const handleDelete = (id: string) => {
+    if (confirm('Delete this template and all its instances?')) {
+      TemplateService.delete(id);
+      loadTemplates();
+      addToast({ type: 'info', title: 'Template Deleted', message: 'Task template removed successfully' });
+    }
+  };
+
+  // Create form state
+  const [formTitle, setFormTitle] = useState('');
+  const [formDescription, setFormDescription] = useState('');
+  const [formCategory, setFormCategory] = useState('Reporting');
+  const [formPriority, setFormPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('MEDIUM');
+  const [formRecurrence, setFormRecurrence] = useState<RecurrenceType>('MONTHLY');
+  const [formDueDay, setFormDueDay] = useState(25);
+  const [formAssignTo, setFormAssignTo] = useState('');
+
+  const handleCreate = () => {
+    if (!formTitle.trim()) {
+      addToast({ type: 'error', title: 'Error', message: 'Title is required' });
+      return;
+    }
+
+    const template = TemplateService.create({
+      title: formTitle,
+      description: formDescription,
+      recurrence: formRecurrence,
+      dueDay: formRecurrence !== 'ONCE' ? formDueDay : undefined,
+      category: formCategory,
+      priority: formPriority,
+      createdBy: '1',
+    });
+
+    // If assignee selected, create first instance
+    if (formAssignTo && formRecurrence !== 'ONCE') {
+      const assignee = UserService.getById(formAssignTo);
+      if (assignee) {
+        const dueDate = new Date();
+        if (formDueDay) {
+          dueDate.setDate(formDueDay);
+          if (dueDate < new Date()) dueDate.setMonth(dueDate.getMonth() + 1);
+        }
+        InstanceService.create({
+          templateId: template.id,
+          template: template,
+          assignedTo: formAssignTo,
+          assignee: assignee,
+          dueDate: dueDate.toISOString().split('T')[0],
+          status: 'PENDING',
+        });
+        NotificationService.notifyTaskAssigned(template.title, assignee.name, dueDate.toISOString().split('T')[0]);
+      }
+    }
+
+    refreshNotifications();
+    loadTemplates();
+    setShowCreateModal(false);
+    resetForm();
+    addToast({ type: 'success', title: 'Template Created', message: `"${formTitle}" created successfully` });
+  };
+
+  const resetForm = () => {
+    setFormTitle('');
+    setFormDescription('');
+    setFormCategory('Reporting');
+    setFormPriority('MEDIUM');
+    setFormRecurrence('MONTHLY');
+    setFormDueDay(25);
+    setFormAssignTo('');
+  };
+
+  const standardUsers = UserService.getAll().filter(u => u.role === 'STANDARD');
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -65,7 +143,7 @@ export default function TaskManagement() {
           <p className="text-sm text-slate-500">Create and manage recurring and one-time task templates</p>
         </div>
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => { resetForm(); setShowCreateModal(true); }}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors shadow-sm"
         >
           <Plus className="w-4 h-4" />
@@ -115,7 +193,7 @@ export default function TaskManagement() {
       {/* Task List */}
       <div className="space-y-3">
         {filteredTemplates.map((template) => {
-          const instances = mockTaskInstances.filter(i => i.templateId === template.id);
+          const instances = InstanceService.getByTemplate(template.id);
           const completedInstances = instances.filter(i => i.status === 'COMPLETED').length;
           
           return (
@@ -154,13 +232,25 @@ export default function TaskManagement() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors" title="View">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setSelectedTask(template); }}
+                    className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                    title="View"
+                  >
                     <Eye className="w-4 h-4 text-slate-400" />
                   </button>
-                  <button className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors" title="Edit">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); }}
+                    className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors"
+                    title="Edit"
+                  >
                     <Edit2 className="w-4 h-4 text-slate-400" />
                   </button>
-                  <button className="p-1.5 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDelete(template.id); }}
+                    className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Delete"
+                  >
                     <Trash2 className="w-4 h-4 text-red-400" />
                   </button>
                 </div>
@@ -180,17 +270,21 @@ export default function TaskManagement() {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Task Title</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Task Title *</label>
                 <input
                   type="text"
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter task title"
+                  placeholder="e.g., Submit Monthly Accomplishment Report"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
                 <textarea
                   rows={3}
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 resize-none"
                   placeholder="Describe the task requirements"
                 />
@@ -198,7 +292,11 @@ export default function TaskManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                  <select
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  >
                     <option>Reporting</option>
                     <option>Performance</option>
                     <option>Monitoring</option>
@@ -210,7 +308,11 @@ export default function TaskManagement() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
-                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                  <select
+                    value={formPriority}
+                    onChange={(e) => setFormPriority(e.target.value as any)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  >
                     <option>LOW</option>
                     <option>MEDIUM</option>
                     <option>HIGH</option>
@@ -221,7 +323,11 @@ export default function TaskManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Recurrence</label>
-                  <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                  <select
+                    value={formRecurrence}
+                    onChange={(e) => setFormRecurrence(e.target.value as RecurrenceType)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  >
                     <option value="ONCE">One-time</option>
                     <option value="DAILY">Daily</option>
                     <option value="WEEKLY">Weekly</option>
@@ -230,26 +336,35 @@ export default function TaskManagement() {
                     <option value="YEARLY">Yearly</option>
                   </select>
                 </div>
+                {formRecurrence !== 'ONCE' && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Due Day (of month)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={formDueDay}
+                      onChange={(e) => setFormDueDay(parseInt(e.target.value) || 1)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+              </div>
+              {formRecurrence !== 'ONCE' && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Due Day (of month)</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="31"
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Assign To (initial)</label>
+                  <select
+                    value={formAssignTo}
+                    onChange={(e) => setFormAssignTo(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                    placeholder="25"
-                  />
+                  >
+                    <option value="">Select a user...</option>
+                    {standardUsers.map(u => (
+                      <option key={u.id} value={u.id}>{u.name} - {u.department}</option>
+                    ))}
+                  </select>
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Assign To</label>
-                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                  <option value="">Select a user...</option>
-                  {mockUsers.filter(u => u.role === 'STANDARD').map(u => (
-                    <option key={u.id} value={u.id}>{u.name} - {u.department}</option>
-                  ))}
-                </select>
-              </div>
+              )}
             </div>
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
               <button
@@ -259,7 +374,7 @@ export default function TaskManagement() {
                 Cancel
               </button>
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={handleCreate}
                 className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
               >
                 Create Template
@@ -281,7 +396,7 @@ export default function TaskManagement() {
                 </div>
                 <button
                   onClick={() => setSelectedTask(null)}
-                  className="text-slate-400 hover:text-slate-600 p-1"
+                  className="text-slate-400 hover:text-slate-600 p-1 text-lg"
                 >
                   ✕
                 </button>
@@ -307,10 +422,10 @@ export default function TaskManagement() {
                 </div>
               </div>
 
-              <h4 className="text-sm font-semibold text-slate-800 mb-3">Task Instances</h4>
+              <h4 className="text-sm font-semibold text-slate-800 mb-3">Task Instances ({InstanceService.getByTemplate(selectedTask.id).length})</h4>
               <div className="space-y-2">
-                {mockTaskInstances
-                  .filter(i => i.templateId === selectedTask.id)
+                {InstanceService.getByTemplate(selectedTask.id)
+                  .sort((a, b) => b.dueDate.localeCompare(a.dueDate))
                   .map((instance) => (
                     <div key={instance.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                       <div className={`w-2 h-2 rounded-full ${
@@ -332,6 +447,9 @@ export default function TaskManagement() {
                       </div>
                     </div>
                   ))}
+                {InstanceService.getByTemplate(selectedTask.id).length === 0 && (
+                  <p className="text-xs text-slate-500 text-center py-4">No instances generated yet</p>
+                )}
               </div>
             </div>
             <div className="p-6 border-t border-slate-200 flex justify-end">

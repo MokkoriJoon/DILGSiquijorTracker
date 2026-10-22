@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
 import Layout from './components/Layout';
 import PublicDashboard from './pages/PublicDashboard';
 import Login from './pages/Login';
@@ -8,6 +9,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import TaskManagement from './pages/TaskManagement';
 import UserManagement from './pages/UserManagement';
 import MyTasks from './pages/MyTasks';
+import SchedulerPage from './pages/SchedulerPage';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { isAuthenticated, user } = useAuth();
@@ -20,11 +22,15 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
     return <Navigate to="/dashboard" replace />;
   }
   
-  return <Layout>{children}</Layout>;
+  return (
+    <NotificationProvider userId={user?.id}>
+      <Layout>{children}</Layout>
+    </NotificationProvider>
+  );
 }
 
 function AppRoutes() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   return (
     <Routes>
@@ -48,6 +54,11 @@ function AppRoutes() {
       <Route path="/users" element={
         <ProtectedRoute allowedRoles={['ADMIN']}>
           <UserManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/scheduler" element={
+        <ProtectedRoute allowedRoles={['ADMIN']}>
+          <SchedulerPage />
         </ProtectedRoute>
       } />
       <Route path="/my-tasks" element={

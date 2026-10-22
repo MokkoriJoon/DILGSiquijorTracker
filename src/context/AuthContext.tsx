@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { User, Role } from '../types';
-import { mockUsers } from '../data/mockData';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { User } from '../types';
+import { UserService, initializeDatabase } from '../services/database';
 
 interface AuthContextType {
   user: User | null;
@@ -14,10 +14,23 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
+  useEffect(() => {
+    // Initialize database on first load
+    initializeDatabase();
+    
+    // Check for existing session
+    const savedUserId = sessionStorage.getItem('dilg_current_user');
+    if (savedUserId) {
+      const foundUser = UserService.getById(savedUserId);
+      if (foundUser) setUser(foundUser);
+    }
+  }, []);
+
   const login = (email: string, _password: string): boolean => {
-    const foundUser = mockUsers.find(u => u.email === email);
+    const foundUser = UserService.authenticate(email, _password);
     if (foundUser) {
       setUser(foundUser);
+      sessionStorage.setItem('dilg_current_user', foundUser.id);
       return true;
     }
     return false;
@@ -25,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     setUser(null);
+    sessionStorage.removeItem('dilg_current_user');
   };
 
   return (

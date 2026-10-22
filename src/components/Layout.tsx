@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import NotificationCenter from './NotificationCenter';
+import ToastContainer from './ToastContainer';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -11,6 +13,7 @@ import {
   Shield,
   Building2,
   ChevronRight,
+  RefreshCw,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -33,6 +36,7 @@ export default function Layout({ children }: LayoutProps) {
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { path: '/tasks', label: 'Task Management', icon: ClipboardList },
         { path: '/users', label: 'User Management', icon: Users },
+        { path: '/scheduler', label: 'Scheduler', icon: RefreshCw },
       ]
     : [
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -137,9 +141,12 @@ export default function Layout({ children }: LayoutProps) {
               Department of the Interior and Local Government
             </p>
           </div>
-          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            System Online
+          <div className="flex items-center gap-2">
+            <NotificationCenter />
+            <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 ml-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span>Connected</span>
+            </div>
           </div>
         </header>
 
@@ -148,6 +155,9 @@ export default function Layout({ children }: LayoutProps) {
           {children}
         </main>
       </div>
+
+      {/* Toast Notifications */}
+      <ToastContainer />
     </div>
   );
 }

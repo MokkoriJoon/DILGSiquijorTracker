@@ -1,0 +1,166 @@
+// Prisma Schema for DILG Tracker
+// This is the production database schema for use with PostgreSQL/Supabase
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  STANDARD
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  SUBMITTED
+  COMPLETED
+  OVERDUE
+}
+
+enum RecurrenceType {
+  ONCE
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model User {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  name       String
+  password   String   // bcrypt hashed
+  role       Role     @default(STANDARD)
+  department String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  assignments TaskAssignment[]
+  notifications Notification[]
+  uploadedFiles UploadedFile[]
+  
+  @@map("users")
+}
+
+model TaskTemplate {
+  id          String         @id @default(uuid())
+  title       String
+  description String?
+  recurrence  RecurrenceType @default(ONCE)
+  dueDay      Int?           // Day of month for recurring tasks (1-31)
+  category    String
+  priority    Priority       @default(MEDIUM)
+  createdBy   String
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  
+  instances   TaskInstance[]
+  
+  @@map("task_templates")
+}
+
+model TaskInstance {
+  id          String     @id @default(uuid())
+  templateId  String
+  dueDate     DateTime
+  status      TaskStatus @default(PENDING)
+  output      String?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  
+  template    TaskTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  assignments TaskAssignment[]
+  files       UploadedFile[]
+  notifications Notification[]
+  
+  @@index([templateId])
+  @@index([dueDate])
+  @@index([status])
+  @@map("task_instances")
+}
+
+model TaskAssignment {
+  id         String @id @default(uuid())
+  instanceId String
+  userId     String
+  
+  instance   TaskInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([instanceId, userId])
+  @@map("task_assignments")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   // info, success, warning, error, task, deadline
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  userId    String?
+  link      String?
+  createdAt DateTime @default(now())
+  
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([read])
+  @@map("notifications")
+}
+
+model UploadedFile {
+  id         String   @id @default(uuid())
+  name       String
+  type       String
+  size       Int
+  url        String   // Supabase Storage URL
+  path       String   // Storage path
+  taskId     String?
+  uploadedBy String?
+  createdAt  DateTime @default(now())
+  
+  instance   TaskInstance? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  uploader   User?         @relation(fields: [uploadedBy], references: [id], onDelete: SetNull)
+  
+  @@index([taskId])
+  @@map("uploaded_files")
+}
+
+model SchedulerLog {
+  id          String   @id @default(uuid())
+  runAt       DateTime @default(now())
+  generated   Int
+  skipped     Int
+  errors      String[] // JSON array of error messages
+  durationMs  Int
+  
+  @@map("scheduler_logs")
+}
+
+model EmailConfig {
+  id            String  @id @default(uuid())
+  enabled       Boolean @default(false)
+  reminderDays  Int     @default(3)
+  overdueAlert  Boolean @default(true)
+  completionAlert Boolean @default(true)
+  dailyDigest   Boolean @default(false)
+  updatedAt     DateTime @updatedAt
+  
+  @@map("email_config")
+}

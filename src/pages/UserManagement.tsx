@@ -1,17 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Plus, Search, Shield, User, Edit2, Trash2, Mail,
-  Building2, Calendar, MoreVertical, Check
+  Plus, Search, Shield, User, Edit2, Trash2,
+  Building2
 } from 'lucide-react';
-import { mockUsers } from '../data/mockData';
+import { UserService, InstanceService } from '../services/database';
+import { useNotifications } from '../context/NotificationContext';
 import { User as UserType, Role } from '../types';
 
 export default function UserManagement() {
+  const { addToast } = useNotifications();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [users, setUsers] = useState<UserType[]>([]);
 
-  const filteredUsers = mockUsers.filter(u => {
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const loadUsers = () => {
+    setUsers(UserService.getAll());
+  };
+
+  const filteredUsers = users.filter(u => {
     const matchesSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.department.toLowerCase().includes(searchTerm.toLowerCase());
@@ -45,6 +56,48 @@ export default function UserManagement() {
     }
   };
 
+  // Create form state
+  const [formName, setFormName] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formDepartment, setFormDepartment] = useState('Central Office');
+  const [formRole, setFormRole] = useState<Role>('STANDARD');
+
+  const handleCreate = () => {
+    if (!formName.trim() || !formEmail.trim()) {
+      addToast({ type: 'error', title: 'Error', message: 'Name and email are required' });
+      return;
+    }
+
+    const existing = UserService.getByEmail(formEmail);
+    if (existing) {
+      addToast({ type: 'error', title: 'Error', message: 'A user with this email already exists' });
+      return;
+    }
+
+    UserService.create({
+      name: formName,
+      email: formEmail,
+      department: formDepartment,
+      role: formRole,
+    });
+
+    loadUsers();
+    setShowCreateModal(false);
+    setFormName('');
+    setFormEmail('');
+    setFormDepartment('Central Office');
+    setFormRole('STANDARD');
+    addToast({ type: 'success', title: 'User Created', message: `${formName} has been added` });
+  };
+
+  const handleDelete = (id: string, name: string) => {
+    if (confirm(`Delete user "${name}"? This cannot be undone.`)) {
+      UserService.delete(id);
+      loadUsers();
+      addToast({ type: 'info', title: 'User Deleted', message: `${name} has been removed` });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -70,7 +123,7 @@ export default function UserManagement() {
               <Shield className="w-5 h-5 text-amber-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-800">{mockUsers.filter(u => u.role === 'ADMIN').length}</p>
+              <p className="text-2xl font-bold text-slate-800">{users.filter(u => u.role === 'ADMIN').length}</p>
               <p className="text-xs text-slate-500">Admin Users</p>
             </div>
           </div>
@@ -81,7 +134,7 @@ export default function UserManagement() {
               <User className="w-5 h-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-800">{mockUsers.filter(u => u.role === 'STANDARD').length}</p>
+              <p className="text-2xl font-bold text-slate-800">{users.filter(u => u.role === 'STANDARD').length}</p>
               <p className="text-xs text-slate-500">Standard Users</p>
             </div>
           </div>
@@ -92,7 +145,7 @@ export default function UserManagement() {
               <Building2 className="w-5 h-5 text-slate-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-800">{new Set(mockUsers.map(u => u.department)).size}</p>
+              <p className="text-2xl font-bold text-slate-800">{new Set(users.map(u => u.department)).size}</p>
               <p className="text-xs text-slate-500">Departments</p>
             </div>
           </div>
@@ -133,45 +186,56 @@ export default function UserManagement() {
                 <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">User</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Department</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Role</th>
+                <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Tasks</th>
                 <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Joined</th>
                 <th className="text-right px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center">
-                        <span className="text-sm font-bold text-white">{user.name.charAt(0)}</span>
+              {filteredUsers.map((user) => {
+                const userTaskCount = InstanceService.getByUser(user.id).length;
+                return (
+                  <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-bold text-white">{user.name.charAt(0)}</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">{user.name}</p>
+                          <p className="text-xs text-slate-500">{user.email}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-slate-800">{user.name}</p>
-                        <p className="text-xs text-slate-500">{user.email}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-slate-600">{user.department}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {getRoleBadge(user.role)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-slate-600">{userTaskCount} tasks</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-slate-500">{user.createdAt}</span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors" title="Edit">
+                          <Edit2 className="w-4 h-4 text-slate-400" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(user.id, user.name)}
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-sm text-slate-600">{user.department}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    {getRoleBadge(user.role)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-sm text-slate-500">{user.createdAt}</span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors" title="Edit">
-                        <Edit2 className="w-4 h-4 text-slate-400" />
-                      </button>
-                      <button className="p-1.5 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -187,46 +251,52 @@ export default function UserManagement() {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
                 <input
                   type="text"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                   placeholder="Juan Dela Cruz"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
                 <input
                   type="email"
+                  value={formEmail}
+                  onChange={(e) => setFormEmail(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                   placeholder="user@dilg.gov.ph"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Department</label>
-                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                <select
+                  value={formDepartment}
+                  onChange={(e) => setFormDepartment(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                >
                   <option>Central Office</option>
                   <option>Regional Office - NCR</option>
                   <option>Regional Office - Region III</option>
                   <option>Regional Office - Region IV-A</option>
                   <option>Regional Office - Region VII</option>
+                  <option>Regional Office - Region IX</option>
+                  <option>Regional Office - Region X</option>
                   <option>Provincial Office - Cavite</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
-                <select className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
+                <select
+                  value={formRole}
+                  onChange={(e) => setFormRole(e.target.value as Role)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                >
                   <option value="STANDARD">Standard User</option>
                   <option value="ADMIN">Admin</option>
                 </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Temporary Password</label>
-                <input
-                  type="password"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                  placeholder="Set initial password"
-                />
               </div>
             </div>
             <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
@@ -237,7 +307,7 @@ export default function UserManagement() {
                 Cancel
               </button>
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={handleCreate}
                 className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
               >
                 Create User
