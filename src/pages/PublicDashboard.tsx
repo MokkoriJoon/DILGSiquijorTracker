@@ -13,11 +13,11 @@ import {
 
 export default function PublicDashboard() {
   const [stats, setStats] = useState({
-    total: 0, completed: 0, pending: 0, inProgress: 0,
-    submitted: 0, overdue: 0, completionRate: 0
+    total: 0, completed: 0, pending: 0, overdue: 0, completionRate: 0
   });
   const [instances, setInstances] = useState<TaskInstance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -25,14 +25,27 @@ export default function PublicDashboard() {
 
   async function loadData() {
     setLoading(true);
-    const [statsData, instancesData] = await Promise.all([
-      DatabaseService.getStats(),
-      DatabaseService.getInstances(),
-    ]);
-    setStats(statsData);
+    const instancesData = await DatabaseService.getInstances();
+    
+    // Calculate stats with merged categories
+    const total = instancesData.length;
+    const completed = instancesData.filter(i => i.status === 'COMPLETED').length;
+    const pending = instancesData.filter(i => 
+      i.status === 'PENDING' || 
+      i.status === 'IN_PROGRESS' || 
+      i.status === 'SUBMITTED'
+    ).length;
+    const overdue = instancesData.filter(i => i.status === 'OVERDUE').length;
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    setStats({ total, completed, pending, overdue, completionRate });
     setInstances(instancesData);
     setLoading(false);
   }
+
+  const handleStatClick = (status: string) => {
+    setStatusFilter(status === statusFilter ? null : status);
+  };
 
   // Build department chart data
   const departmentData = () => {
@@ -54,8 +67,7 @@ export default function PublicDashboard() {
   // Status breakdown for pie chart
   const statusData = [
     { name: 'Completed', value: stats.completed, color: '#10b981' },
-    { name: 'In Progress', value: stats.inProgress, color: '#3b82f6' },
-    { name: 'Pending', value: stats.pending, color: '#94a3b8' },
+    { name: 'Pending', value: stats.pending, color: '#f59e0b' },
     { name: 'Overdue', value: stats.overdue, color: '#ef4444' },
   ].filter(d => d.value > 0);
 
@@ -123,46 +135,70 @@ export default function PublicDashboard() {
           </div>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Cards - Clickable */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <div 
+            onClick={() => handleStatClick('TOTAL')}
+            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === 'TOTAL' ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-100'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase">Total Tasks</p>
                 <p className="text-3xl font-bold text-slate-800 mt-1">{stats.total}</p>
+                <p className="text-xs text-blue-600 mt-1">Click to filter</p>
               </div>
               <div className="w-12 h-12 bg-blue-50 text-blue-700 rounded-xl flex items-center justify-center">
                 <ClipboardList className="w-6 h-6" />
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <div 
+            onClick={() => handleStatClick('COMPLETED')}
+            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === 'COMPLETED' ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-slate-100'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase">Completed</p>
                 <p className="text-3xl font-bold text-emerald-600 mt-1">{stats.completed}</p>
+                <p className="text-xs text-emerald-600 mt-1">Click to filter</p>
               </div>
               <div className="w-12 h-12 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <div 
+            onClick={() => handleStatClick('PENDING')}
+            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === 'PENDING' ? 'border-amber-500 ring-2 ring-amber-200' : 'border-slate-100'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-medium text-slate-500 uppercase">In Progress</p>
-                <p className="text-3xl font-bold text-blue-600 mt-1">{stats.inProgress}</p>
+                <p className="text-xs font-medium text-slate-500 uppercase">Pending</p>
+                <p className="text-3xl font-bold text-amber-600 mt-1">{stats.pending}</p>
+                <p className="text-xs text-amber-600 mt-1">Click to filter</p>
               </div>
-              <div className="w-12 h-12 bg-blue-50 text-blue-700 rounded-xl flex items-center justify-center">
+              <div className="w-12 h-12 bg-amber-50 text-amber-700 rounded-xl flex items-center justify-center">
                 <Clock className="w-6 h-6" />
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <div 
+            onClick={() => handleStatClick('OVERDUE')}
+            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === 'OVERDUE' ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-100'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase">Overdue</p>
                 <p className="text-3xl font-bold text-red-600 mt-1">{stats.overdue}</p>
+                <p className="text-xs text-red-600 mt-1">Click to filter</p>
               </div>
               <div className="w-12 h-12 bg-red-50 text-red-700 rounded-xl flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6" />
@@ -170,6 +206,29 @@ export default function PublicDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Filter Indicator */}
+        {statusFilter && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-blue-900">
+                Showing: <span className="font-bold">{statusFilter}</span> tasks
+              </span>
+              <span className="text-xs text-blue-700">
+                ({statusFilter === 'TOTAL' ? stats.total : 
+                  statusFilter === 'COMPLETED' ? stats.completed :
+                  statusFilter === 'PENDING' ? stats.pending :
+                  stats.overdue} tasks)
+              </span>
+            </div>
+            <button
+              onClick={() => setStatusFilter(null)}
+              className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Clear Filter
+            </button>
+          </div>
+        )}
 
         {/* Completion Rate Banner */}
         <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-6 mb-8 text-white shadow-lg">
@@ -244,8 +303,19 @@ export default function PublicDashboard() {
         {/* All Tasks - Read Only Table */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-slate-800">All Tasks (Read-Only View)</h3>
-            <span className="text-xs text-slate-500">{instances.length} total tasks</span>
+            <h3 className="text-base font-semibold text-slate-800">
+              {statusFilter ? `Filtered Tasks - ${statusFilter}` : 'All Tasks (Read-Only View)'}
+            </h3>
+            <span className="text-xs text-slate-500">
+              {statusFilter 
+                ? `${instances.filter(t => {
+                    if (statusFilter === 'TOTAL') return true;
+                    if (statusFilter === 'PENDING') return t.status === 'PENDING' || t.status === 'IN_PROGRESS' || t.status === 'SUBMITTED';
+                    return t.status === statusFilter;
+                  }).length} tasks`
+                : `${instances.length} total tasks`
+              }
+            </span>
           </div>
           
           {instances.length === 0 ? (
@@ -267,7 +337,13 @@ export default function PublicDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {instances.map((task) => {
+                  {instances.filter(task => {
+                    if (!statusFilter || statusFilter === 'TOTAL') return true;
+                    if (statusFilter === 'PENDING') {
+                      return task.status === 'PENDING' || task.status === 'IN_PROGRESS' || task.status === 'SUBMITTED';
+                    }
+                    return task.status === statusFilter;
+                  }).map((task) => {
                     const statusConfig = getStatusConfig(task.status);
                     const StatusIcon = statusConfig.icon;
                     return (
