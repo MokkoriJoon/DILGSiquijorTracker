@@ -120,6 +120,32 @@ export const DatabaseService = {
     return !error;
   },
 
+  async updateTemplate(id: string, updates: Partial<Omit<TaskTemplate, 'id' | 'createdAt' | 'createdBy'>>): Promise<TaskTemplate | null> {
+    const updateData: any = {};
+    
+    if (updates.title !== undefined) updateData.title = updates.title;
+    if (updates.description !== undefined) updateData.description = updates.description;
+    if (updates.recurrence !== undefined) updateData.recurrence = updates.recurrence;
+    if (updates.dueDay !== undefined) updateData.due_day = updates.dueDay;
+    if (updates.category !== undefined) updateData.category = updates.category;
+    if (updates.priority !== undefined) updateData.priority = updates.priority;
+    if (updates.resourceLink !== undefined) updateData.resource_link = updates.resourceLink || null;
+
+    const { data, error } = await supabase
+      .from('task_templates')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('[DB] Error updating template:', error);
+      return null;
+    }
+    
+    return mapTemplate(data);
+  },
+
   // ============ TASK INSTANCES ============
   
   async getInstances(): Promise<TaskInstance[]> {
