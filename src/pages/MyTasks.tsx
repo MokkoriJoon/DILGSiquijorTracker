@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DatabaseService } from '../services/database';
 import type { TaskInstance } from '../types';
-import { CheckCircle2, Clock, AlertTriangle, Calendar, Tag, Upload, Send } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, Calendar, Tag, Upload, Send, ExternalLink } from 'lucide-react';
 
 export default function MyTasks() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<TaskInstance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [taskToComplete, setTaskToComplete] = useState<TaskInstance | null>(null);
 
   useEffect(() => {
     loadTasks();
@@ -28,6 +30,24 @@ export default function MyTasks() {
     COMPLETED: tasks.filter(t => t.status === 'COMPLETED').length,
     OVERDUE: tasks.filter(t => t.status === 'OVERDUE').length,
   };
+
+  async function handleCompleteTask(task: TaskInstance) {
+    setTaskToComplete(task);
+    setShowCompleteModal(true);
+  }
+
+  async function confirmCompleteTask() {
+    if (!taskToComplete) return;
+    
+    const success = await DatabaseService.updateInstanceStatus(taskToComplete.id, 'COMPLETED');
+    if (success) {
+      await loadTasks();
+      setShowCompleteModal(false);
+      setTaskToComplete(null);
+    } else {
+      alert('Failed to mark task as complete. Please try again.');
+    }
+  }
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">
@@ -110,12 +130,80 @@ export default function MyTasks() {
                       <p className="text-xs text-emerald-700"><strong>Output:</strong> {task.output}</p>
                     </div>
                   )}
+                  {task.status !== 'COMPLETED' && (
+                    <div className="mt-3">
+                      <button
+                        onClick={() => handleCompleteTask(task)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        Mark as Complete
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           ))
         )}
       </div>
+
+      {showCompleteModal && taskToComplete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md">
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-lg font-bold text-slate-800">Confirm Task Completion</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-900 mb-2">⚠️ Important Notice</p>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      By marking this task as complete, you confirm that:
+                    </p>
+                    <ul className="text-xs text-amber-800 mt-2 space-y-1 list-disc list-inside">
+                      <li>The task has been fully completed</li>
+                      <li>All required outputs have been submitted</li>
+                      <li>You take full responsibility for the accuracy and completeness of your work</li>
+                      <li>You understand that false completion reports may result in disciplinary action</li>
+                    </ul>
+                    <p className="text-xs text-amber-900 font-bold mt-3">
+                      This action is your own responsibility and liability.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-slate-600">
+                  <strong>Task:</strong> {taskToComplete.template?.title}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  <strong>Due Date:</strong> {taskToComplete.dueDate}
+                </p>
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowCompleteModal(false);
+                  setTaskToComplete(null);
+                }}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmCompleteTask}
+                className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg"
+              >
+                Yes, I Confirm Completion
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

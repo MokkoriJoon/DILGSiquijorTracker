@@ -79,7 +79,7 @@ function AppRoutes() {
         </ProtectedRoute>
       } />
       <Route path="/my-tasks" element={
-        <ProtectedRoute allowedRoles={['STANDARD']}>
+        <ProtectedRoute allowedRoles={['ADMIN', 'STANDARD']}>
           <MyTasks />
         </ProtectedRoute>
       } />

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DatabaseService } from '../services/database';
 import { useAuth } from '../context/AuthContext';
 import type { TaskTemplate, RecurrenceType } from '../types';
-import { Plus, Search, Repeat, Tag, Users, Clock, Trash2, ExternalLink, X } from 'lucide-react';
+import { Plus, Search, Repeat, Tag, Users, Clock, Trash2, ExternalLink, X, Edit2 } from 'lucide-react';
 
 export default function TaskManagement() {
   const { user } = useAuth();
@@ -11,6 +11,7 @@ export default function TaskManagement() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskTemplate | null>(null);
 
   useEffect(() => {
     loadData();
@@ -118,13 +119,22 @@ export default function TaskManagement() {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={() => handleDelete(template.id, template.title)}
-                  className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                  title="Delete"
-                >
-                  <Trash2 className="w-4 h-4 text-red-500" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setEditingTask(template)}
+                    className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Edit"
+                  >
+                    <Edit2 className="w-4 h-4 text-blue-500" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(template.id, template.title)}
+                    className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4 text-red-500" />
+                  </button>
+                </div>
               </div>
             </div>
           ))
@@ -138,6 +148,19 @@ export default function TaskManagement() {
           onClose={() => setShowCreateModal(false)}
           onCreated={() => {
             setShowCreateModal(false);
+            loadData();
+          }}
+        />
+      )}
+
+      {editingTask && (
+        <EditTaskModal
+          task={editingTask}
+          users={allUsers}
+          currentUser={user}
+          onClose={() => setEditingTask(null)}
+          onUpdated={() => {
+            setEditingTask(null);
             loadData();
           }}
         />
@@ -473,6 +496,212 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
             className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
           >
             {loading ? 'Creating...' : 'Create & Assign'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: { 
+  task: TaskTemplate; 
+  users: any[]; 
+  currentUser: any; 
+  onClose: () => void; 
+  onUpdated: () => void; 
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description);
+  const [category, setCategory] = useState(task.category);
+  const [priority, setPriority] = useState(task.priority);
+  const [recurrence, setRecurrence] = useState(task.recurrence);
+  const [dueDay, setDueDay] = useState(task.dueDay || 25);
+  const [resourceLink, setResourceLink] = useState(task.resourceLink || '');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const categories = [
+    'Reporting', 'LGU Compliance', 'Barangay Governance', 'Peace & Order',
+    'Disaster Preparedness', 'Capacity Building', 'Finance & Budget',
+    'Administration', 'Field Operations', 'Performance Review'
+  ];
+
+  const handleSubmit = async () => {
+    if (!title.trim()) {
+      setError('Title is required');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const result = await DatabaseService.updateTemplate(task.id, {
+        title,
+        description,
+        recurrence,
+        dueDay: recurrence !== 'ONCE' ? dueDay : undefined,
+        category,
+        priority,
+        resourceLink: resourceLink || undefined,
+      });
+
+      if (!result) {
+        setError('Failed to update task');
+        setLoading(false);
+        return;
+      }
+
+      onUpdated();
+    } catch (err) {
+      setError('Failed to update task: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">Edit Program / Task / Project</h3>
+            <p className="text-sm text-slate-500">Update task details</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {error && (
+            <div className="p-4 bg-red-50 border-2 border-red-300 rounded-lg">
+              <div className="flex items-start gap-2">
+                <span className="text-red-600 font-bold">⚠️ Error:</span>
+                <div className="flex-1">
+                  <p className="text-sm text-red-800 font-medium">{error}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Title *</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g., Monthly Accomplishment Report"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 resize-none"
+              placeholder="Describe the task requirements..."
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              >
+                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as any)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+                <option value="CRITICAL">Critical</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Recurrence</label>
+              <select
+                value={recurrence}
+                onChange={(e) => setRecurrence(e.target.value as RecurrenceType)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ONCE">One-time</option>
+                <option value="DAILY">Daily</option>
+                <option value="WEEKLY">Weekly</option>
+                <option value="MONTHLY">Monthly</option>
+                <option value="QUARTERLY">Quarterly</option>
+                <option value="YEARLY">Yearly</option>
+              </select>
+            </div>
+            {recurrence !== 'ONCE' && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Due Day of Month</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={dueDay}
+                  onChange={(e) => setDueDay(parseInt(e.target.value) || 1)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  placeholder="25"
+                />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Resource Link (Google Drive, etc.)
+            </label>
+            <input
+              type="url"
+              value={resourceLink}
+              onChange={(e) => setResourceLink(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              placeholder="https://drive.google.com/..."
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Link to shared folder where task outputs are stored
+            </p>
+          </div>
+
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-xs text-blue-700">
+              <strong>Note:</strong> Editing task details will not affect already assigned task instances. 
+              To reassign users, delete this task and create a new one.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
+          >
+            {loading ? 'Updating...' : 'Update Task'}
           </button>
         </div>
       </div>
