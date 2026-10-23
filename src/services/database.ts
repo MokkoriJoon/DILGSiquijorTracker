@@ -2,6 +2,38 @@ import { supabase } from '../lib/supabase';
 import type { TaskTemplate, TaskInstance, TaskStatus } from '../types';
 import { AuthService } from './auth';
 
+// ============ STANDALONE MAPPER FUNCTIONS ============
+
+function mapTemplate(row: any): TaskTemplate {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description || '',
+    recurrence: row.recurrence,
+    dueDay: row.due_day,
+    category: row.category,
+    priority: row.priority,
+    resourceLink: row.resource_link,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  };
+}
+
+function mapInstance(row: any): TaskInstance {
+  return {
+    id: row.id,
+    templateId: row.template_id,
+    template: row.template ? mapTemplate(row.template) : null as any,
+    assignedTo: row.assigned_to,
+    assignee: row.assignee ? AuthService.mapUser(row.assignee) : null as any,
+    dueDate: row.due_date,
+    status: row.status,
+    output: row.output,
+    completedAt: row.completed_at,
+    createdAt: row.created_at,
+  };
+}
+
 /**
  * Database Service - All task/template operations via Supabase
  */
@@ -19,7 +51,7 @@ export const DatabaseService = {
       return [];
     }
     
-    return (data || []).map(this.mapTemplate);
+    return (data || []).map(mapTemplate);
   },
 
   async createTemplate(template: Omit<TaskTemplate, 'id' | 'createdAt'>): Promise<{ template: TaskTemplate | null; error?: string }> {
@@ -70,13 +102,13 @@ export const DatabaseService = {
           return { template: null, error: retryError.message };
         }
         
-        return { template: this.mapTemplate(retryData) };
+        return { template: mapTemplate(retryData) };
       }
       
       return { template: null, error: error.message };
     }
     
-    return { template: this.mapTemplate(data) };
+    return { template: mapTemplate(data) };
   },
 
   async deleteTemplate(id: string): Promise<boolean> {
@@ -105,7 +137,7 @@ export const DatabaseService = {
       return [];
     }
     
-    return (data || []).map(this.mapInstance);
+    return (data || []).map(mapInstance);
   },
 
   async getInstancesByUser(userId: string): Promise<TaskInstance[]> {
@@ -124,7 +156,7 @@ export const DatabaseService = {
       return [];
     }
     
-    return (data || []).map(this.mapInstance);
+    return (data || []).map(mapInstance);
   },
 
   async createInstance(instance: {
@@ -164,7 +196,7 @@ export const DatabaseService = {
       return null;
     }
     
-    return this.mapInstance(data);
+    return mapInstance(data);
   },
 
   async updateInstanceStatus(
@@ -276,38 +308,6 @@ export const DatabaseService = {
       completionRate: instances.length > 0
         ? Math.round((instances.filter(i => i.status === 'COMPLETED').length / instances.length) * 100)
         : 0,
-    };
-  },
-
-  // ============ MAPPERS ============
-  
-  mapTemplate(row: any): TaskTemplate {
-    return {
-      id: row.id,
-      title: row.title,
-      description: row.description || '',
-      recurrence: row.recurrence,
-      dueDay: row.due_day,
-      category: row.category,
-      priority: row.priority,
-      resourceLink: row.resource_link,
-      createdBy: row.created_by,
-      createdAt: row.created_at,
-    };
-  },
-
-  mapInstance(row: any): TaskInstance {
-    return {
-      id: row.id,
-      templateId: row.template_id,
-      template: row.template ? this.mapTemplate(row.template) : null as any,
-      assignedTo: row.assigned_to,
-      assignee: row.assignee ? AuthService.mapUser(row.assignee) : null as any,
-      dueDate: row.due_date,
-      status: row.status,
-      output: row.output,
-      completedAt: row.completed_at,
-      createdAt: row.created_at,
     };
   },
 };
