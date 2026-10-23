@@ -19,9 +19,12 @@ export default function Profile() {
             <p className="text-blue-100 text-sm">{user.department}</p>
             <div className="flex items-center gap-2 mt-1">
               <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
-                user.role === 'ADMIN' ? 'bg-amber-400/20 text-amber-200' : 'bg-blue-400/20 text-blue-200'
+                user.role === 'SUPER_ADMIN' ? 'bg-purple-400/20 text-purple-200' :
+                user.role === 'ADMIN' ? 'bg-amber-400/20 text-amber-200' : 
+                'bg-blue-400/20 text-blue-200'
               }`}>
-                {user.role === 'ADMIN' ? '🛡️ Admin' : '👤 Standard User'}
+                {user.role === 'SUPER_ADMIN' ? '👑 Super Admin' : 
+                 user.role === 'ADMIN' ? '🛡️ Admin' : '👤 Standard User'}
               </span>
             </div>
           </div>

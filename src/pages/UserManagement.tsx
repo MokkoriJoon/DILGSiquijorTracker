@@ -100,10 +100,15 @@ export default function UserManagement() {
                 </td>
                 <td className="px-6 py-4">
                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-bold rounded-full ${
-                    user.role === 'ADMIN' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                    user.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-700' :
+                    user.role === 'ADMIN' ? 'bg-amber-100 text-amber-700' : 
+                    'bg-blue-100 text-blue-700'
                   }`}>
-                    {user.role === 'ADMIN' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                    {user.role}
+                    {user.role === 'SUPER_ADMIN' ? <Shield className="w-3 h-3" /> : 
+                     user.role === 'ADMIN' ? <Shield className="w-3 h-3" /> : 
+                     <User className="w-3 h-3" />}
+                    {user.role === 'SUPER_ADMIN' ? 'Super Admin' : 
+                     user.role === 'ADMIN' ? 'Admin' : 'Standard'}
                   </span>
                 </td>
                 <td className="px-6 py-4">
@@ -194,7 +199,7 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [department, setDepartment] = useState<string>(DEPARTMENTS[0]);
-  const [role, setRole] = useState<'ADMIN' | 'STANDARD'>('STANDARD');
+  const [role, setRole] = useState<'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'>('STANDARD');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -298,6 +303,7 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
             >
               <option value="STANDARD">Standard User</option>
               <option value="ADMIN">Admin</option>
+              <option value="SUPER_ADMIN">Super Admin</option>
             </select>
           </div>
 
@@ -341,7 +347,7 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
 function EditUserModal({ user, onClose, onUpdated }: { user: any; onClose: () => void; onUpdated: () => void }) {
   const [name, setName] = useState(user.name);
   const [department, setDepartment] = useState(user.department);
-  const [role, setRole] = useState<'ADMIN' | 'STANDARD'>(user.role);
+  const [role, setRole] = useState<'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'>(user.role);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -434,6 +440,7 @@ function EditUserModal({ user, onClose, onUpdated }: { user: any; onClose: () =>
             >
               <option value="STANDARD">Standard User</option>
               <option value="ADMIN">Admin</option>
+              <option value="SUPER_ADMIN">Super Admin</option>
             </select>
           </div>
         </div>

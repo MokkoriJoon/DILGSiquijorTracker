@@ -46,7 +46,7 @@ export const AuthService = {
         isFirstUser = count === 0;
       }
 
-      const role: Role = isFirstUser ? 'ADMIN' : 'STANDARD';
+      const role: Role = isFirstUser ? 'SUPER_ADMIN' : 'STANDARD';
       console.log('[Auth] Assigning role:', role);
 
       // Create user in Supabase Auth

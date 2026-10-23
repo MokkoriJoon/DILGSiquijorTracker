@@ -264,7 +264,7 @@ export const DatabaseService = {
     email: string;
     name: string;
     department: string;
-    role: 'ADMIN' | 'STANDARD';
+    role: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD';
     password: string;
   }) {
     // Create auth user
@@ -311,7 +311,7 @@ export const DatabaseService = {
     return !error;
   },
 
-  async updateUser(id: string, updates: { name?: string; department?: string; role?: 'ADMIN' | 'STANDARD'; password?: string }): Promise<boolean> {
+  async updateUser(id: string, updates: { name?: string; department?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'; password?: string }): Promise<boolean> {
     const updateData: any = {};
     
     if (updates.name !== undefined) updateData.name = updates.name;
