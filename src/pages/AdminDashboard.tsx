@@ -14,27 +14,46 @@ import type { TaskInstance, TaskStatus } from '../types';
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [viewMode, setViewMode] = useState<'stats' | 'kanban'>('stats');
+  const [dashboardScope, setDashboardScope] = useState<'all' | 'my'>('all');
   const [stats, setStats] = useState({
-    total: 0, completed: 0, pending: 0, inProgress: 0,
-    submitted: 0, overdue: 0, completionRate: 0
+    total: 0, completed: 0, pending: 0, overdue: 0, completionRate: 0
   });
   const [instances, setInstances] = useState<TaskInstance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [dashboardScope, user]);
 
   async function loadData() {
     setLoading(true);
-    const [statsData, instancesData] = await Promise.all([
-      DatabaseService.getStats(),
-      DatabaseService.getInstances(),
-    ]);
-    setStats(statsData);
+    setStatusFilter(null); // Reset filter when changing scope
+    
+    let instancesData: TaskInstance[];
+    
+    if (dashboardScope === 'my' && user) {
+      instancesData = await DatabaseService.getInstancesByUser(user.id);
+    } else {
+      instancesData = await DatabaseService.getInstances();
+    }
+    
+    // Calculate stats with merged categories
+    const total = instancesData.length;
+    const completed = instancesData.filter(i => i.status === 'COMPLETED').length;
+    const pending = instancesData.filter(i => i.status === 'PENDING' || i.status === 'IN_PROGRESS' || i.status === 'SUBMITTED').length;
+    const overdue = instancesData.filter(i => i.status === 'OVERDUE').length;
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    setStats({ total, completed, pending, overdue, completionRate });
     setInstances(instancesData);
     setLoading(false);
   }
+
+  const handleStatClick = (status: string) => {
+    setStatusFilter(status);
+    setViewMode('kanban');
+  };
 
   const handleResetDatabase = () => {
     if (confirm('⚠️ This will DELETE ALL data. Are you sure?')) {
@@ -44,17 +63,15 @@ export default function AdminDashboard() {
 
   const kanbanColumns: { status: TaskStatus; label: string; color: string; bgColor: string }[] = [
     { status: 'PENDING', label: 'Pending', color: 'text-slate-600', bgColor: 'bg-slate-100' },
-    { status: 'IN_PROGRESS', label: 'In Progress', color: 'text-blue-600', bgColor: 'bg-blue-100' },
-    { status: 'SUBMITTED', label: 'Submitted', color: 'text-purple-600', bgColor: 'bg-purple-100' },
     { status: 'COMPLETED', label: 'Completed', color: 'text-emerald-600', bgColor: 'bg-emerald-100' },
     { status: 'OVERDUE', label: 'Overdue', color: 'text-red-600', bgColor: 'bg-red-100' },
   ];
 
   const statCards = [
-    { label: 'Total Tasks', value: stats.total, icon: ClipboardList, change: '+12%', color: 'from-blue-500 to-blue-600' },
-    { label: 'Completed', value: stats.completed, icon: CheckCircle2, change: '+8%', color: 'from-emerald-500 to-emerald-600' },
-    { label: 'In Progress', value: stats.inProgress, icon: Clock, change: '+3%', color: 'from-amber-500 to-amber-600' },
-    { label: 'Overdue', value: stats.overdue, icon: AlertTriangle, change: '-2%', color: 'from-red-500 to-red-600' },
+    { label: 'Total Tasks', value: stats.total, icon: ClipboardList, change: '+12%', color: 'from-blue-500 to-blue-600', status: null },
+    { label: 'Completed', value: stats.completed, icon: CheckCircle2, change: '+8%', color: 'from-emerald-500 to-emerald-600', status: 'COMPLETED' },
+    { label: 'Pending', value: stats.pending, icon: Clock, change: '+3%', color: 'from-amber-500 to-amber-600', status: 'PENDING' },
+    { label: 'Overdue', value: stats.overdue, icon: AlertTriangle, change: '-2%', color: 'from-red-500 to-red-600', status: 'OVERDUE' },
   ];
 
   // Build department chart data
@@ -90,11 +107,34 @@ export default function AdminDashboard() {
           <div>
             <h1 className="text-xl font-bold">Welcome back, {user?.name?.split(' ')[0]}!</h1>
             <p className="text-blue-100 text-sm mt-1">
-              Here's what's happening across DILG Siquijor today.
+              {dashboardScope === 'all' 
+                ? "Here's what's happening across DILG Siquijor today."
+                : "Here are your assigned tasks."}
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            {user?.role === 'ADMIN' && (
+            {/* Dashboard Scope Toggle - Only for Admins and Super Admins */}
+            {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+              <div className="flex gap-1 bg-white/10 rounded-lg p-1">
+                <button
+                  onClick={() => setDashboardScope('all')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    dashboardScope === 'all' ? 'bg-white text-blue-700' : 'text-white hover:bg-white/20'
+                  }`}
+                >
+                  All Tasks
+                </button>
+                <button
+                  onClick={() => setDashboardScope('my')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    dashboardScope === 'my' ? 'bg-white text-blue-700' : 'text-white hover:bg-white/20'
+                  }`}
+                >
+                  My Tasks
+                </button>
+              </div>
+            )}
+            {user?.role === 'SUPER_ADMIN' && (
               <button
                 onClick={handleResetDatabase}
                 className="inline-flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-100 text-sm font-medium rounded-lg transition-all border border-red-400/30"
@@ -127,7 +167,13 @@ export default function AdminDashboard() {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((stat) => (
-          <div key={stat.label} className="bg-white rounded-xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+          <div 
+            key={stat.label} 
+            onClick={() => stat.status && handleStatClick(stat.status)}
+            className={`bg-white rounded-xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-all ${
+              stat.status ? 'cursor-pointer hover:border-blue-300' : ''
+            } ${statusFilter === stat.status ? 'ring-2 ring-blue-500 border-blue-300' : ''}`}
+          >
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{stat.label}</p>
@@ -137,6 +183,7 @@ export default function AdminDashboard() {
                   <span className={`text-xs font-medium ${stat.change.startsWith('+') ? 'text-emerald-600' : 'text-red-600'}`}>
                     {stat.change}
                   </span>
+                  {stat.status && <span className="text-xs text-blue-500 ml-1">Click to filter</span>}
                 </div>
               </div>
               <div className={`w-10 h-10 bg-gradient-to-br ${stat.color} rounded-lg flex items-center justify-center shadow-sm`}>
@@ -208,8 +255,6 @@ export default function AdminDashboard() {
               <div className="space-y-3">
                 {[
                   { label: 'Pending', count: stats.pending, color: 'bg-slate-400' },
-                  { label: 'In Progress', count: stats.inProgress, color: 'bg-blue-500' },
-                  { label: 'Submitted', count: stats.submitted, color: 'bg-purple-500' },
                   { label: 'Completed', count: stats.completed, color: 'bg-emerald-500' },
                   { label: 'Overdue', count: stats.overdue, color: 'bg-red-500' },
                 ].map((item) => (
@@ -270,17 +315,39 @@ export default function AdminDashboard() {
       ) : (
         /* Kanban Board */
         <div className="overflow-x-auto">
+          {statusFilter && (
+            <div className="mb-4 flex items-center gap-2">
+              <span className="text-sm text-slate-600">Filtered by:</span>
+              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
+                {statusFilter}
+              </span>
+              <button
+                onClick={() => setStatusFilter(null)}
+                className="text-sm text-slate-500 hover:text-slate-700 underline"
+              >
+                Clear filter
+              </button>
+            </div>
+          )}
           <div className="flex gap-4 min-w-max pb-4">
-            {kanbanColumns.map((column) => {
-              const tasks = instances.filter(t => t.status === column.status);
-              return (
-                <div key={column.status} className="w-72 flex-shrink-0">
-                  <div className={`${column.bgColor} rounded-t-xl px-4 py-3 flex items-center justify-between`}>
-                    <h3 className={`text-sm font-bold ${column.color}`}>{column.label}</h3>
-                    <span className={`text-xs font-bold ${column.color} bg-white/70 px-2 py-0.5 rounded-full`}>
-                      {tasks.length}
-                    </span>
-                  </div>
+            {kanbanColumns
+              .filter(column => !statusFilter || column.status === statusFilter)
+              .map((column) => {
+                const tasks = instances.filter(t => {
+                  // Merge IN_PROGRESS and SUBMITTED into PENDING for display
+                  if (column.status === 'PENDING') {
+                    return t.status === 'PENDING' || t.status === 'IN_PROGRESS' || t.status === 'SUBMITTED';
+                  }
+                  return t.status === column.status;
+                });
+                return (
+                  <div key={column.status} className="w-72 flex-shrink-0">
+                    <div className={`${column.bgColor} rounded-t-xl px-4 py-3 flex items-center justify-between`}>
+                      <h3 className={`text-sm font-bold ${column.color}`}>{column.label}</h3>
+                      <span className={`text-xs font-bold ${column.color} bg-white/70 px-2 py-0.5 rounded-full`}>
+                        {tasks.length}
+                      </span>
+                    </div>
                   <div className="bg-slate-50 rounded-b-xl p-3 space-y-3 min-h-[200px]">
                     {tasks.map((task) => (
                       <div

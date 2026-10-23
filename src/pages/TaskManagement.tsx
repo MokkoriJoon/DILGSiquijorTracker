@@ -217,9 +217,8 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
   const isAdmin = currentUser?.role === 'ADMIN';
 
-  // Filter users based on role
-  // Super Admin can assign to anyone, Admin can only assign to themselves
-  const availableUsers = isSuperAdmin ? users : users.filter(u => u.id === currentUser?.id);
+  // Both Super Admin and Admin can assign to multiple users
+  const availableUsers = users;
 
   const categories = [
     'Reporting', 'LGU Compliance', 'Barangay Governance', 'Peace & Order',
@@ -479,11 +478,6 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Assign to Users * ({selectedUsers.length} selected)
             </label>
-            {isAdmin && !isSuperAdmin && (
-              <p className="text-xs text-amber-600 mb-2">
-                Note: As an Admin, you can only assign tasks to yourself
-              </p>
-            )}
             <div className="border border-slate-200 rounded-lg max-h-48 overflow-y-auto">
               {availableUsers.length === 0 ? (
                 <div className="p-4 text-center text-sm text-slate-500">
@@ -554,8 +548,20 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
   const [recurrence, setRecurrence] = useState(task.recurrence);
   const [dueDay, setDueDay] = useState(task.dueDay || 25);
   const [resourceLink, setResourceLink] = useState(task.resourceLink || '');
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Load current assignments
+  useEffect(() => {
+    loadCurrentAssignments();
+  }, [task.id]);
+
+  async function loadCurrentAssignments() {
+    const instances = await DatabaseService.getInstancesByTemplate(task.id);
+    const userIds = instances.map((inst: any) => inst.assignedTo);
+    setSelectedUsers(userIds);
+  }
 
   const categories = [
     'Reporting', 'LGU Compliance', 'Barangay Governance', 'Peace & Order',
@@ -563,9 +569,22 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
     'Administration', 'Field Operations', 'Performance Review'
   ];
 
+  const toggleUser = (userId: string) => {
+    setSelectedUsers(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
   const handleSubmit = async () => {
     if (!title.trim()) {
       setError('Title is required');
+      return;
+    }
+
+    if (selectedUsers.length === 0) {
+      setError('Please select at least one user to assign');
       return;
     }
 
@@ -573,6 +592,7 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
     setError('');
 
     try {
+      // Update task template
       const result = await DatabaseService.updateTemplate(task.id, {
         title,
         description,
@@ -588,6 +608,9 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
         setLoading(false);
         return;
       }
+
+      // Update assignments
+      await DatabaseService.updateTaskAssignments(task.id, selectedUsers);
 
       onUpdated();
     } catch (err) {
@@ -718,11 +741,46 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
             </p>
           </div>
 
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-xs text-blue-700">
-              <strong>Note:</strong> Editing task details will not affect already assigned task instances. 
-              To reassign users, delete this task and create a new one.
-            </p>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Assigned Users ({selectedUsers.length} selected)
+            </label>
+            <div className="border border-slate-200 rounded-lg max-h-48 overflow-y-auto">
+              {users.length === 0 ? (
+                <div className="p-4 text-center text-sm text-slate-500">
+                  No users registered yet
+                </div>
+              ) : (
+                users.map((u) => (
+                  <label
+                    key={u.id}
+                    className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedUsers.includes(u.id)}
+                      onChange={() => toggleUser(u.id)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <span className="text-xs font-bold text-blue-700">{u.name.charAt(0)}</span>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-slate-800">{u.name}</p>
+                      <p className="text-xs text-slate-500">{u.department}</p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      u.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-700' :
+                      u.role === 'ADMIN' ? 'bg-amber-100 text-amber-700' : 
+                      'bg-blue-100 text-blue-700'
+                    }`}>
+                      {u.role === 'SUPER_ADMIN' ? 'Super Admin' : 
+                       u.role === 'ADMIN' ? 'Admin' : 'Standard'}
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
           </div>
         </div>
 

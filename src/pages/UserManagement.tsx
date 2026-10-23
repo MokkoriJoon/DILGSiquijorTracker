@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseService, UserService } from '../services/database';
-import { Plus, Search, Shield, User, Edit2, Trash2, X, Eye, EyeOff, Key } from 'lucide-react';
+import { Plus, Search, Shield, User, Edit2, Trash2, X, Key } from 'lucide-react';
 import { DEPARTMENTS } from '../data/mockData';
 
 export default function UserManagement() {
@@ -10,7 +10,6 @@ export default function UserManagement() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<any>(null);
-  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadUsers();
@@ -77,7 +76,6 @@ export default function UserManagement() {
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">User</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Department</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Role</th>
-              <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Password</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Joined</th>
               <th className="text-right px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Actions</th>
             </tr>
@@ -111,32 +109,6 @@ export default function UserManagement() {
                     {user.role === 'SUPER_ADMIN' ? 'Super Admin' : 
                      user.role === 'ADMIN' ? 'Admin' : 'Standard'}
                   </span>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-mono text-slate-600">
-                      {visiblePasswords.has(user.id) 
-                        ? (user.password || 'Not set')
-                        : '••••••••'}
-                    </span>
-                    <button
-                      onClick={() => {
-                        const newSet = new Set(visiblePasswords);
-                        if (newSet.has(user.id)) {
-                          newSet.delete(user.id);
-                        } else {
-                          newSet.add(user.id);
-                        }
-                        setVisiblePasswords(newSet);
-                      }}
-                      className="p-1 hover:bg-slate-100 rounded transition-colors"
-                      title={visiblePasswords.has(user.id) ? 'Hide password' : 'Show password'}
-                    >
-                      {visiblePasswords.has(user.id) 
-                        ? <EyeOff className="w-4 h-4 text-slate-500" />
-                        : <Eye className="w-4 h-4 text-slate-500" />}
-                    </button>
-                  </div>
                 </td>
                 <td className="px-6 py-4">
                   <span className="text-sm text-slate-500">{user.created_at}</span>

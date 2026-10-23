@@ -25,8 +25,7 @@ export default function MyTasks() {
 
   const statusCounts = {
     all: tasks.length,
-    PENDING: tasks.filter(t => t.status === 'PENDING').length,
-    IN_PROGRESS: tasks.filter(t => t.status === 'IN_PROGRESS').length,
+    PENDING: tasks.filter(t => t.status === 'PENDING' || t.status === 'IN_PROGRESS' || t.status === 'SUBMITTED').length,
     COMPLETED: tasks.filter(t => t.status === 'COMPLETED').length,
     OVERDUE: tasks.filter(t => t.status === 'OVERDUE').length,
   };
@@ -64,10 +63,6 @@ export default function MyTasks() {
           <div className="bg-white/10 rounded-lg px-4 py-2">
             <p className="text-2xl font-bold">{statusCounts.COMPLETED}</p>
             <p className="text-xs text-blue-200">Completed</p>
-          </div>
-          <div className="bg-white/10 rounded-lg px-4 py-2">
-            <p className="text-2xl font-bold">{statusCounts.IN_PROGRESS}</p>
-            <p className="text-xs text-blue-200">In Progress</p>
           </div>
           <div className="bg-white/10 rounded-lg px-4 py-2">
             <p className="text-2xl font-bold">{statusCounts.OVERDUE}</p>
