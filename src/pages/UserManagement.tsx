@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseService, UserService } from '../services/database';
-import { Plus, Search, Shield, User, Edit2, Trash2, X, Eye, EyeOff } from 'lucide-react';
+import { Plus, Search, Shield, User, Edit2, Trash2, X, Eye, EyeOff, Key } from 'lucide-react';
 import { DEPARTMENTS } from '../data/mockData';
 
 export default function UserManagement() {
@@ -9,6 +9,7 @@ export default function UserManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [resetPasswordUser, setResetPasswordUser] = useState<any>(null);
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -143,6 +144,13 @@ export default function UserManagement() {
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end gap-2">
                     <button
+                      onClick={() => setResetPasswordUser(user)}
+                      className="p-2 hover:bg-amber-50 rounded-lg transition-colors"
+                      title="Reset Password"
+                    >
+                      <Key className="w-4 h-4 text-amber-600" />
+                    </button>
+                    <button
                       onClick={() => setEditingUser(user)}
                       className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
                       title="Edit"
@@ -186,6 +194,17 @@ export default function UserManagement() {
           onClose={() => setEditingUser(null)}
           onUpdated={() => {
             setEditingUser(null);
+            loadUsers();
+          }}
+        />
+      )}
+
+      {resetPasswordUser && (
+        <ResetPasswordModal
+          user={resetPasswordUser}
+          onClose={() => setResetPasswordUser(null)}
+          onReset={() => {
+            setResetPasswordUser(null);
             loadUsers();
           }}
         />
@@ -460,6 +479,154 @@ function EditUserModal({ user, onClose, onUpdated }: { user: any; onClose: () =>
             {loading ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ResetPasswordModal({ user, onClose, onReset }: { user: any; onClose: () => void; onReset: () => void }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
+    let password = '';
+    for (let i = 0; i < 12; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setNewPassword(password);
+    setConfirmPassword(password);
+  };
+
+  const handleSubmit = async () => {
+    if (!newPassword || newPassword.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const result = await UserService.update(user.id, { password: newPassword });
+
+      if (result.success) {
+        setSuccess(true);
+        setTimeout(() => {
+          onReset();
+        }, 2000);
+      } else {
+        setError(result.error || 'Failed to reset password');
+      }
+    } catch (err) {
+      setError('An error occurred while resetting password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md">
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+              <Key className="w-5 h-5 text-amber-600" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-800">Reset Password</h3>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {success ? (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <p className="text-sm font-medium text-emerald-800">✓ Password reset successfully!</p>
+              <p className="text-xs text-emerald-700 mt-1">
+                Share the new password with {user.name} securely.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs text-blue-700">
+                  <strong>User:</strong> {user.name} ({user.email})
+                </p>
+              </div>
+
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium text-slate-700">New Password</label>
+                  <button
+                    onClick={generatePassword}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Generate Random
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 font-mono"
+                  placeholder="Enter new password"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Confirm Password</label>
+                <input
+                  type="text"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 font-mono"
+                  placeholder="Confirm new password"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-xs text-amber-800">
+                  <strong>⚠️ Important:</strong> This updates the password in our database. The user can now login with this new password.
+                  Share it securely (in-person, phone call, or encrypted message).
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {!success && (
+          <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="px-4 py-2 text-sm font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50"
+            >
+              {loading ? 'Resetting...' : 'Reset Password'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

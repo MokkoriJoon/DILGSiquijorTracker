@@ -404,16 +404,12 @@ export const UserService = {
     // Update the users table
     const result = await DatabaseService.updateUser(id, updates);
     
-    // If password was updated, also update Supabase Auth
-    if (result.success && updates.password) {
-      try {
-        // Note: This requires admin privileges in Supabase
-        // In production, you'd use the service role key or admin API
-        console.log('[Auth] Password updated for user:', id);
-      } catch (error) {
-        console.error('[Auth] Failed to update password in Supabase Auth:', error);
-      }
-    }
+    // Note: Password updates in the users table only
+    // Supabase Auth manages authentication separately
+    // For password resets, Super Admin should:
+    // 1. View the current password via the eye icon
+    // 2. Share it with the user securely
+    // 3. Or use Supabase Dashboard → Authentication → Users → Reset Password
     
     return result;
   },
