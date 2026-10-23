@@ -1,6 +1,41 @@
 import { supabase } from '../lib/supabase';
-import type { TaskTemplate, TaskInstance, TaskStatus } from '../types';
+import type { TaskTemplate, TaskInstance, TaskStatus, RecurrenceType } from '../types';
 import { AuthService } from './auth';
+
+// ============ HELPER FUNCTIONS ============
+
+function calculateNextDueDate(recurrence: RecurrenceType, dueDay: number): string {
+  const now = new Date();
+  let target = new Date(now);
+  
+  switch (recurrence) {
+    case 'DAILY':
+      target.setDate(now.getDate() + 1);
+      break;
+    case 'WEEKLY':
+      target.setDate(now.getDate() + 7);
+      break;
+    case 'MONTHLY':
+      target.setMonth(now.getMonth() + 1);
+      target.setDate(dueDay);
+      if (target < now) target.setMonth(target.getMonth() + 1);
+      break;
+    case 'QUARTERLY':
+      target.setMonth(now.getMonth() + 3);
+      target.setDate(dueDay);
+      if (target < now) target.setMonth(target.getMonth() + 3);
+      break;
+    case 'YEARLY':
+      target.setFullYear(now.getFullYear() + 1);
+      target.setDate(dueDay);
+      if (target < now) target.setFullYear(target.getFullYear() + 1);
+      break;
+    default:
+      target.setDate(now.getDate() + 7);
+  }
+  
+  return target.toISOString().split('T')[0];
+}
 
 // ============ STANDALONE MAPPER FUNCTIONS ============
 
@@ -144,6 +179,101 @@ export const DatabaseService = {
     }
     
     return mapTemplate(data);
+  },
+
+  async getInstancesByTemplate(templateId: string): Promise<TaskInstance[]> {
+    const { data, error } = await supabase
+      .from('task_instances')
+      .select(`
+        *,
+        template:task_templates(*),
+        assignee:users!task_instances_assigned_to_fkey(*)
+      `)
+      .eq('template_id', templateId)
+      .order('due_date', { ascending: true });
+    
+    if (error) {
+      console.error('[DB] Error fetching template instances:', error);
+      return [];
+    }
+    
+    return (data || []).map(mapInstance);
+  },
+
+  async updateTaskAssignments(templateId: string, userIds: string[]): Promise<boolean> {
+    try {
+      // Get current instances for this template
+      const { data: currentInstances, error: fetchError } = await supabase
+        .from('task_instances')
+        .select('id, assigned_to')
+        .eq('template_id', templateId);
+      
+      if (fetchError) {
+        console.error('[DB] Error fetching current instances:', fetchError);
+        return false;
+      }
+
+      const currentUserIds = (currentInstances || []).map((inst: any) => inst.assigned_to);
+      
+      // Find users to add (in new list but not in current)
+      const usersToAdd = userIds.filter(id => !currentUserIds.includes(id));
+      
+      // Find users to remove (in current list but not in new)
+      const usersToRemove = currentUserIds.filter((id: string) => !userIds.includes(id));
+
+      // Get template details for creating new instances
+      const { data: template, error: templateError } = await supabase
+        .from('task_templates')
+        .select('*')
+        .eq('id', templateId)
+        .single();
+      
+      if (templateError || !template) {
+        console.error('[DB] Error fetching template:', templateError);
+        return false;
+      }
+
+      // Remove instances for users no longer assigned
+      if (usersToRemove.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('task_instances')
+          .delete()
+          .eq('template_id', templateId)
+          .in('assigned_to', usersToRemove);
+        
+        if (deleteError) {
+          console.error('[DB] Error removing instances:', deleteError);
+        }
+      }
+
+      // Add instances for new users
+      if (usersToAdd.length > 0) {
+        const dueDate = template.recurrence === 'ONCE' 
+          ? new Date().toISOString().split('T')[0]
+          : calculateNextDueDate(template.recurrence, template.due_day || 25);
+
+        const newInstances = usersToAdd.map(userId => ({
+          template_id: templateId,
+          assigned_to: userId,
+          due_date: dueDate,
+          status: 'PENDING',
+        }));
+
+        const { error: insertError } = await supabase
+          .from('task_instances')
+          .insert(newInstances);
+        
+        if (insertError) {
+          console.error('[DB] Error adding instances:', insertError);
+          return false;
+        }
+      }
+
+      return true;
+    } catch (error) {
+      console.error('[DB] Error updating task assignments:', error);
+      return false;
+    }
   },
 
   // ============ TASK INSTANCES ============
