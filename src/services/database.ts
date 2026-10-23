@@ -22,28 +22,61 @@ export const DatabaseService = {
     return (data || []).map(this.mapTemplate);
   },
 
-  async createTemplate(template: Omit<TaskTemplate, 'id' | 'createdAt'>): Promise<TaskTemplate | null> {
+  async createTemplate(template: Omit<TaskTemplate, 'id' | 'createdAt'>): Promise<{ template: TaskTemplate | null; error?: string }> {
+    // First, try to insert with resource_link
+    const insertData: any = {
+      title: template.title,
+      description: template.description,
+      recurrence: template.recurrence,
+      due_day: template.dueDay,
+      category: template.category,
+      priority: template.priority,
+      created_by: template.createdBy,
+    };
+
+    // Only add resource_link if it's provided
+    if (template.resourceLink) {
+      insertData.resource_link = template.resourceLink;
+    }
+
     const { data, error } = await supabase
       .from('task_templates')
-      .insert({
-        title: template.title,
-        description: template.description,
-        recurrence: template.recurrence,
-        due_day: template.dueDay,
-        category: template.category,
-        priority: template.priority,
-        resource_link: template.resourceLink,
-        created_by: template.createdBy,
-      })
+      .insert(insertData)
       .select()
       .single();
     
     if (error) {
       console.error('[DB] Error creating template:', error);
-      return null;
+      
+      // If the error is about resource_link column not existing, try again without it
+      if (error.message?.includes('resource_link') || error.code === '42703') {
+        console.warn('[DB] resource_link column missing, retrying without it...');
+        
+        const { data: retryData, error: retryError } = await supabase
+          .from('task_templates')
+          .insert({
+            title: template.title,
+            description: template.description,
+            recurrence: template.recurrence,
+            due_day: template.dueDay,
+            category: template.category,
+            priority: template.priority,
+            created_by: template.createdBy,
+          })
+          .select()
+          .single();
+        
+        if (retryError) {
+          return { template: null, error: retryError.message };
+        }
+        
+        return { template: this.mapTemplate(retryData) };
+      }
+      
+      return { template: null, error: error.message };
     }
     
-    return this.mapTemplate(data);
+    return { template: this.mapTemplate(data) };
   },
 
   async deleteTemplate(id: string): Promise<boolean> {
