@@ -371,12 +371,12 @@ function EditUserModal({ user, onClose, onUpdated }: { user: any; onClose: () =>
       updates.password = password;
     }
 
-    const success = await UserService.update(user.id, updates);
+    const result = await UserService.update(user.id, updates);
 
-    if (success) {
+    if (result.success) {
       onUpdated();
     } else {
-      setError('Failed to update user');
+      setError(result.error || 'Failed to update user');
     }
 
     setLoading(false);

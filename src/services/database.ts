@@ -311,7 +311,7 @@ export const DatabaseService = {
     return !error;
   },
 
-  async updateUser(id: string, updates: { name?: string; department?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'; password?: string }): Promise<boolean> {
+  async updateUser(id: string, updates: { name?: string; department?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'; password?: string }): Promise<{ success: boolean; error?: string }> {
     const updateData: any = {};
     
     if (updates.name !== undefined) updateData.name = updates.name;
@@ -329,11 +329,17 @@ export const DatabaseService = {
     
     if (error) {
       console.error('[DB] Error updating user:', error);
-      return false;
+      return { success: false, error: error.message };
+    }
+
+    // Check if any rows were actually updated
+    if (!data || data.length === 0) {
+      console.error('[DB] No rows were updated. This might be a permissions issue.');
+      return { success: false, error: 'No rows were updated. Check RLS policies.' };
     }
 
     console.log('[DB] User updated successfully:', data);
-    return true;
+    return { success: true };
   },
 
   // ============ STATS ============
@@ -396,10 +402,10 @@ export const UserService = {
   create: (userData: any) => DatabaseService.createUser(userData),
   update: async (id: string, updates: any) => {
     // Update the users table
-    const success = await DatabaseService.updateUser(id, updates);
+    const result = await DatabaseService.updateUser(id, updates);
     
     // If password was updated, also update Supabase Auth
-    if (success && updates.password) {
+    if (result.success && updates.password) {
       try {
         // Note: This requires admin privileges in Supabase
         // In production, you'd use the service role key or admin API
@@ -409,7 +415,7 @@ export const UserService = {
       }
     }
     
-    return success;
+    return result;
   },
   delete: (id: string) => DatabaseService.deleteUser(id),
 };
