@@ -31,13 +31,26 @@ export default function Layout({ children }: LayoutProps) {
     navigate('/');
   };
 
-  const navItems = user?.role === 'ADMIN'
+  // Role-based navigation
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isAdmin = user?.role === 'ADMIN';
+  const canManageUsers = isSuperAdmin; // Only Super Admin can manage users
+  const canManageTasks = isSuperAdmin || isAdmin; // Both can manage tasks
+
+  const navItems = canManageUsers
     ? [
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { path: '/my-tasks', label: 'My Tasks', icon: ClipboardList },
         { path: '/tasks', label: 'Task Management', icon: ClipboardList },
         { path: '/users', label: 'User Management', icon: Users },
         { path: '/scheduler', label: 'Scheduler', icon: RefreshCw },
+        { path: '/profile', label: 'My Profile', icon: Shield },
+      ]
+    : canManageTasks
+    ? [
+        { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { path: '/my-tasks', label: 'My Tasks', icon: ClipboardList },
+        { path: '/tasks', label: 'Task Management', icon: ClipboardList },
         { path: '/profile', label: 'My Profile', icon: Shield },
       ]
     : [

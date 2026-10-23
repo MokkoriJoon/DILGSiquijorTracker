@@ -64,12 +64,12 @@ function AppRoutes() {
         </ProtectedRoute>
       } />
       <Route path="/tasks" element={
-        <ProtectedRoute allowedRoles={['ADMIN']}>
+        <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN']}>
           <TaskManagement />
         </ProtectedRoute>
       } />
       <Route path="/users" element={
-        <ProtectedRoute allowedRoles={['ADMIN']}>
+        <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
           <UserManagement />
         </ProtectedRoute>
       } />

@@ -28,15 +28,29 @@ export default function TaskManagement() {
     setLoading(false);
   }
 
-  const filteredTemplates = templates.filter(t =>
-    t.title.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Role-based permissions
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const isAdmin = user?.role === 'ADMIN';
+  const canManageTasks = isSuperAdmin || isAdmin;
+
+  // Filter templates based on role
+  // Super Admin sees all tasks, Admin sees only their own tasks
+  const filteredTemplates = templates.filter(t => {
+    const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = isSuperAdmin || t.createdBy === user?.id;
+    return matchesSearch && matchesRole;
+  });
 
   const handleDelete = async (id: string, title: string) => {
     if (confirm(`Delete "${title}"? This will also delete all assigned tasks.`)) {
       await DatabaseService.deleteTemplate(id);
       await loadData();
     }
+  };
+
+  // Check if current user can edit this task
+  const canEditTask = (task: TaskTemplate) => {
+    return isSuperAdmin || task.createdBy === user?.id;
   };
 
   if (loading) {
@@ -50,15 +64,21 @@ export default function TaskManagement() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-800">Programs / Tasks / Projects</h2>
-          <p className="text-sm text-slate-500">Create and manage tasks, assign to users</p>
+          <p className="text-sm text-slate-500">
+            {isSuperAdmin ? 'Create and manage tasks, assign to users' :
+             isAdmin ? 'Create and manage your own tasks' :
+             'View assigned tasks'}
+          </p>
         </div>
-        <button 
-          onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          Add Program/Task/Project
-        </button>
+        {canManageTasks && (
+          <button 
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Add Program/Task/Project
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
@@ -120,20 +140,24 @@ export default function TaskManagement() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setEditingTask(template)}
-                    className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
-                    title="Edit"
-                  >
-                    <Edit2 className="w-4 h-4 text-blue-500" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(template.id, template.title)}
-                    className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                  </button>
+                  {canEditTask(template) && (
+                    <>
+                      <button
+                        onClick={() => setEditingTask(template)}
+                        className="p-2 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Edit"
+                      >
+                        <Edit2 className="w-4 h-4 text-blue-500" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(template.id, template.title)}
+                        className="p-2 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -188,6 +212,14 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Role-based permissions
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+  const isAdmin = currentUser?.role === 'ADMIN';
+
+  // Filter users based on role
+  // Super Admin can assign to anyone, Admin can only assign to themselves
+  const availableUsers = isSuperAdmin ? users : users.filter(u => u.id === currentUser?.id);
 
   const categories = [
     'Reporting', 'LGU Compliance', 'Barangay Governance', 'Peace & Order',
@@ -447,13 +479,18 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Assign to Users * ({selectedUsers.length} selected)
             </label>
+            {isAdmin && !isSuperAdmin && (
+              <p className="text-xs text-amber-600 mb-2">
+                Note: As an Admin, you can only assign tasks to yourself
+              </p>
+            )}
             <div className="border border-slate-200 rounded-lg max-h-48 overflow-y-auto">
-              {users.length === 0 ? (
+              {availableUsers.length === 0 ? (
                 <div className="p-4 text-center text-sm text-slate-500">
                   No users registered yet
                 </div>
               ) : (
-                users.map((u) => (
+                availableUsers.map((u) => (
                   <label
                     key={u.id}
                     className="flex items-center gap-3 p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-0"

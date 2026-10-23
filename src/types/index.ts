@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'STANDARD' | 'PUBLIC';
+export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD' | 'PUBLIC';
 
 export type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'SUBMITTED' | 'COMPLETED' | 'OVERDUE';
 
