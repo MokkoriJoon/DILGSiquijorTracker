@@ -74,12 +74,12 @@ function AppRoutes() {
         </ProtectedRoute>
       } />
       <Route path="/scheduler" element={
-        <ProtectedRoute allowedRoles={['ADMIN']}>
+        <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN']}>
           <SchedulerPage />
         </ProtectedRoute>
       } />
       <Route path="/my-tasks" element={
-        <ProtectedRoute allowedRoles={['ADMIN', 'STANDARD']}>
+        <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN', 'STANDARD']}>
           <MyTasks />
         </ProtectedRoute>
       } />

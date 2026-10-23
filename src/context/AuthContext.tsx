@@ -21,16 +21,66 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastActivity, setLastActivity] = useState<number>(Date.now());
+
+  // Session timeout durations (in milliseconds)
+  const SESSION_TIMEOUT = {
+    SUPER_ADMIN: 10 * 60 * 1000, // 10 minutes
+    ADMIN: 5 * 60 * 1000,        // 5 minutes
+    STANDARD: 3 * 60 * 1000,     // 3 minutes
+  };
 
   // Check for existing Supabase session on mount
   useEffect(() => {
     checkUser();
   }, []);
 
+  // Session timeout checker
+  useEffect(() => {
+    if (!user) return;
+
+    const timeoutDuration = SESSION_TIMEOUT[user.role as keyof typeof SESSION_TIMEOUT] || SESSION_TIMEOUT.STANDARD;
+
+    const checkTimeout = () => {
+      const now = Date.now();
+      const timeSinceLastActivity = now - lastActivity;
+
+      if (timeSinceLastActivity >= timeoutDuration) {
+        console.log(`[Session] Timeout reached for ${user.role}. Logging out...`);
+        logout();
+      }
+    };
+
+    // Check every 30 seconds
+    const interval = setInterval(checkTimeout, 30000);
+
+    return () => clearInterval(interval);
+  }, [user, lastActivity]);
+
+  // Track user activity
+  useEffect(() => {
+    if (!user) return;
+
+    const updateActivity = () => {
+      setLastActivity(Date.now());
+    };
+
+    // Listen for user interactions
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach(event => window.addEventListener(event, updateActivity));
+
+    return () => {
+      events.forEach(event => window.removeEventListener(event, updateActivity));
+    };
+  }, [user]);
+
   async function checkUser() {
     try {
       const currentUser = await AuthService.getCurrentUser();
       setUser(currentUser);
+      if (currentUser) {
+        setLastActivity(Date.now());
+      }
     } catch (error) {
       console.error('Error checking user:', error);
     } finally {
@@ -42,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await AuthService.login(email, password);
     if (result.success && result.user) {
       setUser(result.user);
+      setLastActivity(Date.now());
     }
     return { success: result.success, error: result.error };
   }
@@ -55,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await AuthService.register(email, password, fullName, department);
     if (result.success && result.user) {
       setUser(result.user);
+      setLastActivity(Date.now());
     }
     return { 
       success: result.success, 
