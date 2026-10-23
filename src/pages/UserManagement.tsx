@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseService, UserService } from '../services/database';
-import { Plus, Search, Shield, User, Edit2, Trash2, X } from 'lucide-react';
+import { Plus, Search, Shield, User, Edit2, Trash2, X, Eye, EyeOff } from 'lucide-react';
 import { DEPARTMENTS } from '../data/mockData';
 
 export default function UserManagement() {
@@ -9,6 +9,7 @@ export default function UserManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadUsers();
@@ -75,6 +76,7 @@ export default function UserManagement() {
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">User</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Department</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Role</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Password</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Joined</th>
               <th className="text-right px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Actions</th>
             </tr>
@@ -103,6 +105,32 @@ export default function UserManagement() {
                     {user.role === 'ADMIN' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
                     {user.role}
                   </span>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono text-slate-600">
+                      {visiblePasswords.has(user.id) 
+                        ? (user.password || 'Not set')
+                        : '••••••••'}
+                    </span>
+                    <button
+                      onClick={() => {
+                        const newSet = new Set(visiblePasswords);
+                        if (newSet.has(user.id)) {
+                          newSet.delete(user.id);
+                        } else {
+                          newSet.add(user.id);
+                        }
+                        setVisiblePasswords(newSet);
+                      }}
+                      className="p-1 hover:bg-slate-100 rounded transition-colors"
+                      title={visiblePasswords.has(user.id) ? 'Hide password' : 'Show password'}
+                    >
+                      {visiblePasswords.has(user.id) 
+                        ? <EyeOff className="w-4 h-4 text-slate-500" />
+                        : <Eye className="w-4 h-4 text-slate-500" />}
+                    </button>
+                  </div>
                 </td>
                 <td className="px-6 py-4">
                   <span className="text-sm text-slate-500">{user.created_at}</span>
@@ -272,6 +300,22 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
               <option value="ADMIN">Admin</option>
             </select>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              New Password <span className="text-slate-400 font-normal">(leave blank to keep current)</span>
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter new password (min 6 characters)"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Leave blank to keep the current password
+            </p>
+          </div>
         </div>
 
         <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
@@ -298,6 +342,7 @@ function EditUserModal({ user, onClose, onUpdated }: { user: any; onClose: () =>
   const [name, setName] = useState(user.name);
   const [department, setDepartment] = useState(user.department);
   const [role, setRole] = useState<'ADMIN' | 'STANDARD'>(user.role);
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -307,10 +352,20 @@ function EditUserModal({ user, onClose, onUpdated }: { user: any; onClose: () =>
       return;
     }
 
+    if (password && password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
-    const success = await UserService.update(user.id, { name, department, role });
+    const updates: any = { name, department, role };
+    if (password) {
+      updates.password = password;
+    }
+
+    const success = await UserService.update(user.id, updates);
 
     if (success) {
       onUpdated();
