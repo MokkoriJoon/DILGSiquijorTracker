@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabaseAuthService } from '../services/supabaseAuth';
+import { AuthService } from '../services/auth';
 import type { User } from '../types';
 
 interface AuthContextType {
@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function checkUser() {
     try {
-      const currentUser = await supabaseAuthService.getCurrentUser();
+      const currentUser = await AuthService.getCurrentUser();
       setUser(currentUser);
     } catch (error) {
       console.error('Error checking user:', error);
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function login(email: string, password: string) {
-    const result = await supabaseAuthService.login(email, password);
+    const result = await AuthService.login(email, password);
     if (result.success && result.user) {
       setUser(result.user);
     }
@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fullName: string,
     department: string
   ) {
-    const result = await supabaseAuthService.register(email, password, fullName, department);
+    const result = await AuthService.register(email, password, fullName, department);
     if (result.success && result.user) {
       setUser(result.user);
     }
@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
-    await supabaseAuthService.logout();
+    await AuthService.logout();
     setUser(null);
   }
 

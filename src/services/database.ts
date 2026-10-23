@@ -1,218 +1,324 @@
+import { supabase } from '../lib/supabase';
+import type { TaskTemplate, TaskInstance, TaskStatus } from '../types';
+import { AuthService } from './auth';
+
 /**
- * Database Service Layer
- * 
- * This service abstracts all database operations. In development/demo mode,
- * it uses localStorage for persistence. In production, swap the implementation
- * to use Supabase client calls.
- * 
- * To switch to Supabase:
- * 1. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env
- * 2. Replace localStorage calls with supabase.from().select() etc.
+ * Database Service - All task/template operations via Supabase
  */
-
-import { User, TaskTemplate, TaskInstance, TaskStatus, RecurrenceType } from '../types';
-import { mockUsers, mockTaskTemplates, mockTaskInstances } from '../data/mockData';
-
-const DB_KEYS = {
-  USERS: 'dilg_users',
-  TEMPLATES: 'dilg_templates',
-  INSTANCES: 'dilg_instances',
-  INITIALIZED: 'dilg_db_initialized',
-};
-
-// ============ INITIALIZATION ============
-
-export function initializeDatabase(): void {
-  const isInitialized = localStorage.getItem(DB_KEYS.INITIALIZED);
-  if (!isInitialized) {
-    // Clean system - start with empty data
-    localStorage.setItem(DB_KEYS.USERS, JSON.stringify([]));
-    localStorage.setItem(DB_KEYS.TEMPLATES, JSON.stringify([]));
-    localStorage.setItem(DB_KEYS.INSTANCES, JSON.stringify([]));
-    localStorage.setItem(DB_KEYS.INITIALIZED, 'true');
-  }
-}
-
-export function isFirstUser(): boolean {
-  const users = UserService.getAll();
-  return users.length === 0;
-}
-
-export function resetDatabase(): void {
-  localStorage.removeItem(DB_KEYS.INITIALIZED);
-  localStorage.removeItem(DB_KEYS.USERS);
-  localStorage.removeItem(DB_KEYS.TEMPLATES);
-  localStorage.removeItem(DB_KEYS.INSTANCES);
-  initializeDatabase();
-}
-
-// ============ USERS ============
-
-export const UserService = {
-  getAll(): User[] {
-    const data = localStorage.getItem(DB_KEYS.USERS);
-    return data ? JSON.parse(data) : [];
+export const DatabaseService = {
+  // ============ TASK TEMPLATES ============
+  
+  async getTemplates(): Promise<TaskTemplate[]> {
+    const { data, error } = await supabase
+      .from('task_templates')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('[DB] Error fetching templates:', error);
+      return [];
+    }
+    
+    return (data || []).map(this.mapTemplate);
   },
 
-  getById(id: string): User | undefined {
-    return this.getAll().find(u => u.id === id);
+  async createTemplate(template: Omit<TaskTemplate, 'id' | 'createdAt'>): Promise<TaskTemplate | null> {
+    const { data, error } = await supabase
+      .from('task_templates')
+      .insert({
+        title: template.title,
+        description: template.description,
+        recurrence: template.recurrence,
+        due_day: template.dueDay,
+        category: template.category,
+        priority: template.priority,
+        created_by: template.createdBy,
+      })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error('[DB] Error creating template:', error);
+      return null;
+    }
+    
+    return this.mapTemplate(data);
   },
 
-  getByEmail(email: string): User | undefined {
-    return this.getAll().find(u => u.email === email);
+  async deleteTemplate(id: string): Promise<boolean> {
+    const { error } = await supabase
+      .from('task_templates')
+      .delete()
+      .eq('id', id);
+    
+    return !error;
   },
 
-  create(user: Omit<User, 'id' | 'createdAt'>): User {
-    const users = this.getAll();
-    const newUser: User = {
-      ...user,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    users.push(newUser);
-    localStorage.setItem(DB_KEYS.USERS, JSON.stringify(users));
-    return newUser;
+  // ============ TASK INSTANCES ============
+  
+  async getInstances(): Promise<TaskInstance[]> {
+    const { data, error } = await supabase
+      .from('task_instances')
+      .select(`
+        *,
+        template:task_templates(*),
+        assignee:users!task_instances_assigned_to_fkey(*)
+      `)
+      .order('due_date', { ascending: true });
+    
+    if (error) {
+      console.error('[DB] Error fetching instances:', error);
+      return [];
+    }
+    
+    return (data || []).map(this.mapInstance);
   },
 
-  update(id: string, updates: Partial<User>): User | undefined {
-    const users = this.getAll();
-    const index = users.findIndex(u => u.id === id);
-    if (index === -1) return undefined;
-    users[index] = { ...users[index], ...updates };
-    localStorage.setItem(DB_KEYS.USERS, JSON.stringify(users));
-    return users[index];
+  async getInstancesByUser(userId: string): Promise<TaskInstance[]> {
+    const { data, error } = await supabase
+      .from('task_instances')
+      .select(`
+        *,
+        template:task_templates(*),
+        assignee:users!task_instances_assigned_to_fkey(*)
+      `)
+      .eq('assigned_to', userId)
+      .order('due_date', { ascending: true });
+    
+    if (error) {
+      console.error('[DB] Error fetching user instances:', error);
+      return [];
+    }
+    
+    return (data || []).map(this.mapInstance);
   },
 
-  delete(id: string): boolean {
-    const users = this.getAll();
-    const filtered = users.filter(u => u.id !== id);
-    if (filtered.length === users.length) return false;
-    localStorage.setItem(DB_KEYS.USERS, JSON.stringify(filtered));
-    return true;
-  },
-};
-
-// ============ TASK TEMPLATES ============
-
-export const TemplateService = {
-  getAll(): TaskTemplate[] {
-    const data = localStorage.getItem(DB_KEYS.TEMPLATES);
-    return data ? JSON.parse(data) : [];
-  },
-
-  getById(id: string): TaskTemplate | undefined {
-    return this.getAll().find(t => t.id === id);
-  },
-
-  create(template: Omit<TaskTemplate, 'id' | 'createdAt'>): TaskTemplate {
-    const templates = this.getAll();
-    const newTemplate: TaskTemplate = {
-      ...template,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    templates.push(newTemplate);
-    localStorage.setItem(DB_KEYS.TEMPLATES, JSON.stringify(templates));
-    return newTemplate;
-  },
-
-  update(id: string, updates: Partial<TaskTemplate>): TaskTemplate | undefined {
-    const templates = this.getAll();
-    const index = templates.findIndex(t => t.id === id);
-    if (index === -1) return undefined;
-    templates[index] = { ...templates[index], ...updates };
-    localStorage.setItem(DB_KEYS.TEMPLATES, JSON.stringify(templates));
-    return templates[index];
+  async createInstance(instance: {
+    templateId: string;
+    assignedTo: string;
+    dueDate: string;
+    status?: TaskStatus;
+  }): Promise<TaskInstance | null> {
+    // Fetch template and assignee first
+    const [templateResult, assigneeResult] = await Promise.all([
+      supabase.from('task_templates').select('*').eq('id', instance.templateId).single(),
+      supabase.from('users').select('*').eq('id', instance.assignedTo).single(),
+    ]);
+    
+    if (templateResult.error || assigneeResult.error) {
+      console.error('[DB] Error fetching related data');
+      return null;
+    }
+    
+    const { data, error } = await supabase
+      .from('task_instances')
+      .insert({
+        template_id: instance.templateId,
+        assigned_to: instance.assignedTo,
+        due_date: instance.dueDate,
+        status: instance.status || 'PENDING',
+      })
+      .select(`
+        *,
+        template:task_templates(*),
+        assignee:users!task_instances_assigned_to_fkey(*)
+      `)
+      .single();
+    
+    if (error) {
+      console.error('[DB] Error creating instance:', error);
+      return null;
+    }
+    
+    return this.mapInstance(data);
   },
 
-  delete(id: string): boolean {
-    const templates = this.getAll();
-    const filtered = templates.filter(t => t.id !== id);
-    if (filtered.length === templates.length) return false;
-    localStorage.setItem(DB_KEYS.TEMPLATES, JSON.stringify(filtered));
-    return true;
-  },
-};
-
-// ============ TASK INSTANCES ============
-
-export const InstanceService = {
-  getAll(): TaskInstance[] {
-    const data = localStorage.getItem(DB_KEYS.INSTANCES);
-    return data ? JSON.parse(data) : [];
-  },
-
-  getById(id: string): TaskInstance | undefined {
-    return this.getAll().find(i => i.id === id);
+  async updateInstanceStatus(
+    id: string, 
+    status: TaskStatus, 
+    output?: string
+  ): Promise<boolean> {
+    const updates: any = { status };
+    if (output !== undefined) updates.output = output;
+    if (status === 'COMPLETED') {
+      updates.completed_at = new Date().toISOString().split('T')[0];
+    }
+    
+    const { error } = await supabase
+      .from('task_instances')
+      .update(updates)
+      .eq('id', id);
+    
+    return !error;
   },
 
-  getByUser(userId: string): TaskInstance[] {
-    return this.getAll().filter(i => i.assignedTo === userId);
+  // ============ USERS ============
+  
+  async getUsers() {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('[DB] Error fetching users:', error);
+      return [];
+    }
+    
+    return data || [];
   },
 
-  getByTemplate(templateId: string): TaskInstance[] {
-    return this.getAll().filter(i => i.templateId === templateId);
+  async createUser(userData: {
+    email: string;
+    name: string;
+    department: string;
+    role: 'ADMIN' | 'STANDARD';
+    password: string;
+  }) {
+    // Create auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: userData.email,
+      password: userData.password,
+      options: {
+        data: {
+          full_name: userData.name,
+          department: userData.department,
+          role: userData.role,
+        },
+      },
+    });
+    
+    if (authError) return { success: false, error: authError.message };
+    if (!authData.user) return { success: false, error: 'Failed to create user' };
+    
+    // Create profile
+    const { error: profileError } = await supabase
+      .from('users')
+      .upsert({
+        id: authData.user.id,
+        email: userData.email,
+        name: userData.name,
+        department: userData.department,
+        role: userData.role,
+      }, { onConflict: 'id' });
+    
+    if (profileError) {
+      return { success: false, error: profileError.message };
+    }
+    
+    return { success: true };
   },
 
-  getByStatus(status: TaskStatus): TaskInstance[] {
-    return this.getAll().filter(i => i.status === status);
+  async deleteUser(id: string): Promise<boolean> {
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', id);
+    
+    return !error;
   },
 
-  getOverdue(): TaskInstance[] {
-    const today = new Date().toISOString().split('T')[0];
-    return this.getAll().filter(i => 
-      i.dueDate < today && i.status !== 'COMPLETED' && i.status !== 'SUBMITTED'
-    );
-  },
-
-  create(instance: Omit<TaskInstance, 'id' | 'createdAt'>): TaskInstance {
-    const instances = this.getAll();
-    const newInstance: TaskInstance = {
-      ...instance,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    instances.push(newInstance);
-    localStorage.setItem(DB_KEYS.INSTANCES, JSON.stringify(instances));
-    return newInstance;
-  },
-
-  update(id: string, updates: Partial<TaskInstance>): TaskInstance | undefined {
-    const instances = this.getAll();
-    const index = instances.findIndex(i => i.id === id);
-    if (index === -1) return undefined;
-    instances[index] = { ...instances[index], ...updates };
-    localStorage.setItem(DB_KEYS.INSTANCES, JSON.stringify(instances));
-    return instances[index];
-  },
-
-  updateStatus(id: string, status: TaskStatus, output?: string): TaskInstance | undefined {
-    const updates: Partial<TaskInstance> = { status };
-    if (output) updates.output = output;
-    if (status === 'COMPLETED') updates.completedAt = new Date().toISOString().split('T')[0];
-    return this.update(id, updates);
-  },
-
-  delete(id: string): boolean {
-    const instances = this.getAll();
-    const filtered = instances.filter(i => i.id !== id);
-    if (filtered.length === instances.length) return false;
-    localStorage.setItem(DB_KEYS.INSTANCES, JSON.stringify(filtered));
-    return true;
-  },
-
-  getStats() {
-    const all = this.getAll();
+  // ============ STATS ============
+  
+  async getStats() {
+    const instances = await this.getInstances();
+    
     return {
-      total: all.length,
-      completed: all.filter(i => i.status === 'COMPLETED').length,
-      pending: all.filter(i => i.status === 'PENDING').length,
-      inProgress: all.filter(i => i.status === 'IN_PROGRESS').length,
-      submitted: all.filter(i => i.status === 'SUBMITTED').length,
-      overdue: all.filter(i => i.status === 'OVERDUE').length,
-      completionRate: all.length > 0 
-        ? Math.round((all.filter(i => i.status === 'COMPLETED').length / all.length) * 100) 
+      total: instances.length,
+      completed: instances.filter(i => i.status === 'COMPLETED').length,
+      pending: instances.filter(i => i.status === 'PENDING').length,
+      inProgress: instances.filter(i => i.status === 'IN_PROGRESS').length,
+      submitted: instances.filter(i => i.status === 'SUBMITTED').length,
+      overdue: instances.filter(i => i.status === 'OVERDUE').length,
+      completionRate: instances.length > 0
+        ? Math.round((instances.filter(i => i.status === 'COMPLETED').length / instances.length) * 100)
         : 0,
     };
   },
+
+  // ============ MAPPERS ============
+  
+  mapTemplate(row: any): TaskTemplate {
+    return {
+      id: row.id,
+      title: row.title,
+      description: row.description || '',
+      recurrence: row.recurrence,
+      dueDay: row.due_day,
+      category: row.category,
+      priority: row.priority,
+      createdBy: row.created_by,
+      createdAt: row.created_at,
+    };
+  },
+
+  mapInstance(row: any): TaskInstance {
+    return {
+      id: row.id,
+      templateId: row.template_id,
+      template: row.template ? this.mapTemplate(row.template) : null as any,
+      assignedTo: row.assigned_to,
+      assignee: row.assignee ? AuthService.mapUser(row.assignee) : null as any,
+      dueDate: row.due_date,
+      status: row.status,
+      output: row.output,
+      completedAt: row.completed_at,
+      createdAt: row.created_at,
+    };
+  },
 };
+
+// ============ ALIASES FOR BACKWARD COMPATIBILITY ============
+
+// TemplateService alias
+export const TemplateService = {
+  getAll: () => DatabaseService.getTemplates(),
+  create: (template: Omit<TaskTemplate, 'id' | 'createdAt'>) => DatabaseService.createTemplate(template),
+  delete: (id: string) => DatabaseService.deleteTemplate(id),
+  getById: async (id: string) => {
+    const templates = await DatabaseService.getTemplates();
+    return templates.find(t => t.id === id);
+  },
+};
+
+// InstanceService alias
+export const InstanceService = {
+  getAll: () => DatabaseService.getInstances(),
+  getByUser: (userId: string) => DatabaseService.getInstancesByUser(userId),
+  create: (instance: any) => DatabaseService.createInstance(instance),
+  updateStatus: (id: string, status: TaskStatus, output?: string) => 
+    DatabaseService.updateInstanceStatus(id, status, output),
+  getByTemplate: async (templateId: string) => {
+    const instances = await DatabaseService.getInstances();
+    return instances.filter(i => i.templateId === templateId);
+  },
+  getStats: () => DatabaseService.getStats(),
+};
+
+// UserService alias
+export const UserService = {
+  getAll: () => DatabaseService.getUsers(),
+  getById: async (id: string) => {
+    const users = await DatabaseService.getUsers();
+    return users.find((u: any) => u.id === id);
+  },
+  getByEmail: async (email: string) => {
+    const users = await DatabaseService.getUsers();
+    return users.find((u: any) => u.email === email);
+  },
+  create: (userData: any) => DatabaseService.createUser(userData),
+  delete: (id: string) => DatabaseService.deleteUser(id),
+};
+
+// Reset function (clears all data - use with caution)
+export function resetDatabase() {
+  // In production with Supabase, this would require admin access
+  // For now, just log a warning
+  console.warn('[DB] resetDatabase called - not implemented for Supabase. Use Supabase dashboard to clear data.');
+}
+
+// Initialize function (no-op for Supabase)
+export function initializeDatabase() {
+  // No-op - Supabase handles initialization
+  console.log('[DB] Database initialized (Supabase mode)');
+}

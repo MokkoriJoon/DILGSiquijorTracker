@@ -1,189 +1,271 @@
-/**
- * Authentication Service
- * 
- * Handles user registration, login, and session management.
- * Uses localStorage for demo mode, designed to swap to Supabase Auth in production.
- */
+import { supabase } from '../lib/supabase';
+import type { User, Role } from '../types';
 
-import { User, Role } from '../types';
-import { UserService } from './database';
-
-// Simple hash function for demo (use bcrypt in production!)
-function hashPassword(password: string): string {
-  // This is NOT secure for production - just for demo
-  // In production, use bcrypt via Supabase Auth
-  return btoa(password + '_dilg_salt_2024');
-}
-
-function verifyPassword(password: string, hash: string): boolean {
-  return hashPassword(password) === hash;
-}
-
-export interface RegisterData {
-  name: string;
-  email: string;
-  password: string;
-  department: string;
-  role: Role;
-}
-
-export interface LoginResult {
-  success: boolean;
-  user?: User;
-  error?: string;
-}
-
-export interface RegisterResult {
+export interface AuthResult {
   success: boolean;
   user?: User;
   error?: string;
   isFirstAdmin?: boolean;
 }
 
+/**
+ * Supabase Authentication Service
+ * Handles all auth operations with Supabase
+ */
 export const AuthService = {
   /**
    * Register a new user
-   * First user to register automatically becomes ADMIN
+   * First user automatically becomes ADMIN
    */
-  register(data: RegisterData): RegisterResult {
-    // Validate input
-    if (!data.name.trim()) {
-      return { success: false, error: 'Name is required' };
-    }
-    if (!data.email.trim()) {
-      return { success: false, error: 'Email is required' };
-    }
-    if (!this.isValidEmail(data.email)) {
-      return { success: false, error: 'Invalid email format' };
-    }
-    if (!data.password || data.password.length < 6) {
-      return { success: false, error: 'Password must be at least 6 characters' };
-    }
-    if (!data.department) {
-      return { success: false, error: 'Department is required' };
-    }
+  async register(
+    email: string,
+    password: string,
+    fullName: string,
+    department: string
+  ): Promise<AuthResult> {
+    try {
+      console.log('[Auth] Starting registration for:', email);
 
-    // Check if email already exists
-    const existingUser = UserService.getByEmail(data.email);
-    if (existingUser) {
-      return { success: false, error: 'An account with this email already exists' };
-    }
+      // Check if this is the first user
+      const { count, error: countError } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true });
 
-    // First user automatically becomes ADMIN
-    const isFirstUser = UserService.getAll().length === 0;
-    const assignedRole = isFirstUser ? 'ADMIN' : data.role;
-
-    // Create user with hashed password
-    const hashedPassword = hashPassword(data.password);
-    
-    // Store password hash in a separate storage (simulating database)
-    const passwordStore = JSON.parse(localStorage.getItem('dilg_passwords') || '{}');
-    passwordStore[data.email] = hashedPassword;
-    localStorage.setItem('dilg_passwords', JSON.stringify(passwordStore));
-
-    // Create user in database
-    const newUser = UserService.create({
-      name: data.name,
-      email: data.email,
-      role: assignedRole,
-      department: data.department,
-    });
-
-    return { success: true, user: newUser, isFirstAdmin: isFirstUser };
-  },
-
-  /**
-   * Authenticate user with email and password
-   */
-  login(email: string, password: string): LoginResult {
-    if (!email || !password) {
-      return { success: false, error: 'Email and password are required' };
-    }
-
-    // Find user by email
-    const user = UserService.getByEmail(email);
-    if (!user) {
-      return { success: false, error: 'Invalid email or password' };
-    }
-
-    // Verify password
-    const passwordStore = JSON.parse(localStorage.getItem('dilg_passwords') || '{}');
-    const storedHash = passwordStore[email];
-
-    // If no stored hash (legacy demo user), accept any password for backward compatibility
-    if (!storedHash) {
-      // Check if this is a seeded demo user
-      const demoEmails = ['admin@dilg.gov.ph', 'juan.cruz@dilg.gov.ph', 'ana.reyes@dilg.gov.ph', 
-                          'pedro.garcia@dilg.gov.ph', 'lisa.mendoza@dilg.gov.ph', 'carlos.ramos@dilg.gov.ph'];
-      if (demoEmails.includes(email)) {
-        return { success: true, user };
+      let isFirstUser = false;
+      
+      if (countError) {
+        console.error('[Auth] Error counting users:', countError);
+        // If RLS blocks, assume first user
+        if (countError.code === '42501' || countError.message?.includes('permission denied')) {
+          console.warn('[Auth] RLS blocking count. Assuming first user.');
+          isFirstUser = true;
+        } else {
+          return { success: false, error: `Database error: ${countError.message}` };
+        }
+      } else {
+        isFirstUser = count === 0;
       }
-      return { success: false, error: 'Invalid email or password' };
-    }
 
-    if (!verifyPassword(password, storedHash)) {
-      return { success: false, error: 'Invalid email or password' };
-    }
+      const role: Role = isFirstUser ? 'ADMIN' : 'STANDARD';
+      console.log('[Auth] Assigning role:', role);
 
-    return { success: true, user };
+      // Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            department,
+            role,
+          },
+        },
+      });
+
+      if (authError) {
+        console.error('[Auth] Signup error:', authError);
+        return { success: false, error: authError.message };
+      }
+
+      if (!authData?.user) {
+        return { success: false, error: 'Failed to create user' };
+      }
+
+      console.log('[Auth] Auth user created:', authData.user.id);
+
+      // Insert user profile into database
+      const { data: profileData, error: profileError } = await supabase
+        .from('users')
+        .upsert(
+          {
+            id: authData.user.id,
+            email,
+            name: fullName,
+            department,
+            role,
+          },
+          { onConflict: 'id' }
+        )
+        .select()
+        .single();
+
+      if (profileError) {
+        console.error('[Auth] Profile insert error:', profileError);
+        
+        // Check if recursion error - try to fetch existing profile
+        if (profileError.message?.includes('infinite recursion')) {
+          console.warn('[Auth] Recursion detected. Trying to fetch existing profile...');
+          const { data: existing } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', authData.user.id)
+            .single();
+          
+          if (existing) {
+            console.log('[Auth] Found existing profile');
+            return {
+              success: true,
+              user: this.mapUser(existing),
+              isFirstAdmin: isFirstUser,
+            };
+          }
+        }
+        
+        return { 
+          success: false, 
+          error: `Profile creation failed: ${profileError.message}` 
+        };
+      }
+
+      console.log('[Auth] Registration successful');
+
+      return {
+        success: true,
+        user: this.mapUser(profileData),
+        isFirstAdmin: isFirstUser,
+      };
+    } catch (error) {
+      console.error('[Auth] Registration exception:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Registration failed',
+      };
+    }
   },
 
   /**
-   * Change user password
+   * Login user
    */
-  changePassword(email: string, oldPassword: string, newPassword: string): { success: boolean; error?: string } {
-    const user = UserService.getByEmail(email);
-    if (!user) {
-      return { success: false, error: 'User not found' };
+  async login(email: string, password: string): Promise<AuthResult> {
+    try {
+      console.log('[Auth] Login attempt for:', email);
+
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) {
+        console.error('[Auth] Login error:', authError);
+        return { success: false, error: 'Invalid email or password' };
+      }
+
+      if (!authData?.user) {
+        return { success: false, error: 'Authentication failed' };
+      }
+
+      console.log('[Auth] Auth successful, fetching profile...');
+
+      // Fetch user profile
+      const { data: profileData, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authData.user.id)
+        .single();
+
+      if (profileError || !profileData) {
+        console.error('[Auth] Profile fetch error:', profileError);
+        return { success: false, error: 'User profile not found' };
+      }
+
+      console.log('[Auth] Login successful');
+
+      return {
+        success: true,
+        user: this.mapUser(profileData),
+      };
+    } catch (error) {
+      console.error('[Auth] Login exception:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Login failed',
+      };
     }
-
-    // Verify old password
-    const passwordStore = JSON.parse(localStorage.getItem('dilg_passwords') || '{}');
-    const storedHash = passwordStore[email];
-
-    if (storedHash && !verifyPassword(oldPassword, storedHash)) {
-      return { success: false, error: 'Current password is incorrect' };
-    }
-
-    if (newPassword.length < 6) {
-      return { success: false, error: 'New password must be at least 6 characters' };
-    }
-
-    // Update password
-    passwordStore[email] = hashPassword(newPassword);
-    localStorage.setItem('dilg_passwords', JSON.stringify(passwordStore));
-
-    return { success: true };
   },
 
   /**
-   * Check if email is valid format
+   * Logout user
+   */
+  async logout(): Promise<void> {
+    try {
+      console.log('[Auth] Logging out...');
+      await supabase.auth.signOut();
+      console.log('[Auth] Logout successful');
+    } catch (error) {
+      console.error('[Auth] Logout error:', error);
+    }
+  },
+
+  /**
+   * Get current authenticated user
+   */
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      
+      if (!authUser) {
+        return null;
+      }
+
+      // Fetch profile
+      const { data: profileData, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      if (error || !profileData) {
+        return null;
+      }
+
+      return this.mapUser(profileData);
+    } catch (error) {
+      console.error('[Auth] getCurrentUser error:', error);
+      return null;
+    }
+  },
+
+  /**
+   * Update password
+   */
+  async updatePassword(newPassword: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Password update failed',
+      };
+    }
+  },
+
+  /**
+   * Map database row to User type
+   */
+  mapUser(row: any): User {
+    return {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      role: row.role as Role,
+      department: row.department,
+      createdAt: row.created_at,
+    };
+  },
+
+  /**
+   * Validate email format
    */
   isValidEmail(email: string): boolean {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
-  },
-
-  /**
-   * Get all registered users (for admin)
-   */
-  getAllUsers(): User[] {
-    return UserService.getAll();
-  },
-
-  /**
-   * Delete user account
-   */
-  deleteAccount(email: string): boolean {
-    const user = UserService.getByEmail(email);
-    if (!user) return false;
-
-    // Remove password
-    const passwordStore = JSON.parse(localStorage.getItem('dilg_passwords') || '{}');
-    delete passwordStore[email];
-    localStorage.setItem('dilg_passwords', JSON.stringify(passwordStore));
-
-    // Remove user
-    return UserService.delete(user.id);
   },
 };
