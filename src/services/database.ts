@@ -32,6 +32,7 @@ export const DatabaseService = {
         due_day: template.dueDay,
         category: template.category,
         priority: template.priority,
+        resource_link: template.resourceLink,
         created_by: template.createdBy,
       })
       .select()
@@ -218,6 +219,15 @@ export const DatabaseService = {
     return !error;
   },
 
+  async updateUser(id: string, updates: { name?: string; department?: string; role?: 'ADMIN' | 'STANDARD' }): Promise<boolean> {
+    const { error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', id);
+    
+    return !error;
+  },
+
   // ============ STATS ============
   
   async getStats() {
@@ -247,6 +257,7 @@ export const DatabaseService = {
       dueDay: row.due_day,
       category: row.category,
       priority: row.priority,
+      resourceLink: row.resource_link,
       createdBy: row.created_by,
       createdAt: row.created_at,
     };
@@ -307,6 +318,7 @@ export const UserService = {
     return users.find((u: any) => u.email === email);
   },
   create: (userData: any) => DatabaseService.createUser(userData),
+  update: (id: string, updates: any) => DatabaseService.updateUser(id, updates),
   delete: (id: string) => DatabaseService.deleteUser(id),
 };
 
