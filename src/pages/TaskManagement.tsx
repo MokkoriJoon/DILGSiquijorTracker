@@ -181,6 +181,9 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
   };
 
   const handleSubmit = async () => {
+    console.log('[CreateTask] Starting task creation...');
+    console.log('[CreateTask] Form data:', { title, description, category, priority, recurrence, dueDay, dueDate, resourceLink, selectedUsers });
+
     if (!title.trim()) {
       setError('Title is required');
       return;
@@ -199,7 +202,8 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
 
     try {
       // Create the task template
-      const template = await DatabaseService.createTemplate({
+      console.log('[CreateTask] Creating template...');
+      const result = await DatabaseService.createTemplate({
         title,
         description,
         recurrence,
@@ -210,25 +214,40 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
         createdBy: currentUser?.id || '',
       });
 
-      if (!template) {
-        setError('Failed to create task');
+      console.log('[CreateTask] Template creation result:', result);
+
+      if (!result.template) {
+        const errorMsg = `Failed to create task: ${result.error || 'Unknown error'}`;
+        console.error('[CreateTask]', errorMsg);
+        setError(errorMsg);
         setLoading(false);
         return;
       }
 
+      const template = result.template;
+      console.log('[CreateTask] Template created:', template.id);
+
       // Create instances for each selected user
+      console.log('[CreateTask] Creating instances for', selectedUsers.length, 'users...');
       for (const userId of selectedUsers) {
-        await DatabaseService.createInstance({
+        const instanceResult = await DatabaseService.createInstance({
           templateId: template.id,
           assignedTo: userId,
           dueDate: recurrence === 'ONCE' ? dueDate : calculateNextDueDate(recurrence, dueDay),
           status: 'PENDING',
         });
+
+        if (!instanceResult) {
+          console.warn('[CreateTask] Failed to create instance for user:', userId);
+        }
       }
 
+      console.log('[CreateTask] Task creation complete!');
       onCreated();
     } catch (err) {
-      setError('Failed to create task: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      const errorMsg = 'Failed to create task: ' + (err instanceof Error ? err.message : 'Unknown error');
+      console.error('[CreateTask] Exception:', err);
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -282,8 +301,16 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
 
         <div className="p-6 space-y-4">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-              {error}
+            <div className="p-4 bg-red-50 border-2 border-red-300 rounded-lg">
+              <div className="flex items-start gap-2">
+                <span className="text-red-600 font-bold">⚠️ Error:</span>
+                <div className="flex-1">
+                  <p className="text-sm text-red-800 font-medium">{error}</p>
+                  <p className="text-xs text-red-600 mt-2">
+                    Check browser console (F12) for detailed error logs
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
