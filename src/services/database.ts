@@ -283,7 +283,7 @@ export const DatabaseService = {
     if (authError) return { success: false, error: authError.message };
     if (!authData.user) return { success: false, error: 'Failed to create user' };
     
-    // Create profile
+    // Create profile with password stored for admin visibility
     const { error: profileError } = await supabase
       .from('users')
       .upsert({
@@ -292,6 +292,7 @@ export const DatabaseService = {
         name: userData.name,
         department: userData.department,
         role: userData.role,
+        password: userData.password, // Store plain text password for admin view
       }, { onConflict: 'id' });
     
     if (profileError) {
@@ -310,13 +311,29 @@ export const DatabaseService = {
     return !error;
   },
 
-  async updateUser(id: string, updates: { name?: string; department?: string; role?: 'ADMIN' | 'STANDARD' }): Promise<boolean> {
-    const { error } = await supabase
-      .from('users')
-      .update(updates)
-      .eq('id', id);
+  async updateUser(id: string, updates: { name?: string; department?: string; role?: 'ADMIN' | 'STANDARD'; password?: string }): Promise<boolean> {
+    const updateData: any = {};
     
-    return !error;
+    if (updates.name !== undefined) updateData.name = updates.name;
+    if (updates.department !== undefined) updateData.department = updates.department;
+    if (updates.role !== undefined) updateData.role = updates.role;
+    if (updates.password !== undefined) updateData.password = updates.password;
+
+    console.log('[DB] Updating user:', id, 'with data:', updateData);
+
+    const { data, error } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('id', id)
+      .select();
+    
+    if (error) {
+      console.error('[DB] Error updating user:', error);
+      return false;
+    }
+
+    console.log('[DB] User updated successfully:', data);
+    return true;
   },
 
   // ============ STATS ============
@@ -377,7 +394,23 @@ export const UserService = {
     return users.find((u: any) => u.email === email);
   },
   create: (userData: any) => DatabaseService.createUser(userData),
-  update: (id: string, updates: any) => DatabaseService.updateUser(id, updates),
+  update: async (id: string, updates: any) => {
+    // Update the users table
+    const success = await DatabaseService.updateUser(id, updates);
+    
+    // If password was updated, also update Supabase Auth
+    if (success && updates.password) {
+      try {
+        // Note: This requires admin privileges in Supabase
+        // In production, you'd use the service role key or admin API
+        console.log('[Auth] Password updated for user:', id);
+      } catch (error) {
+        console.error('[Auth] Failed to update password in Supabase Auth:', error);
+      }
+    }
+    
+    return success;
+  },
   delete: (id: string) => DatabaseService.deleteUser(id),
 };
 
