@@ -22,6 +22,7 @@ export interface TaskTemplate {
   dueDay?: number;
   category: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  resourceLink?: string;
   createdBy: string;
   createdAt: string;
 }

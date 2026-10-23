@@ -94,6 +94,16 @@ export default function MyTasks() {
                       <Tag className="w-3 h-3" />
                       {task.template?.category}
                     </span>
+                    {task.template?.resourceLink && (
+                      <a 
+                        href={task.template.resourceLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 underline"
+                      >
+                        📁 Resource Link
+                      </a>
+                    )}
                   </div>
                   {task.output && (
                     <div className="mt-3 p-2 bg-emerald-50 border border-emerald-100 rounded-lg">

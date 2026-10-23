@@ -263,6 +263,7 @@ export default function PublicDashboard() {
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Department</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Due Date</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Resource</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -301,6 +302,13 @@ export default function PublicDashboard() {
                             <StatusIcon className="w-3 h-3" />
                             {task.status.replace('_', ' ')}
                           </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {task.template?.resourceLink ? (
+                            <span className="text-xs text-blue-600">📁 Available</span>
+                          ) : (
+                            <span className="text-xs text-slate-400">-</span>
+                          )}
                         </td>
                       </tr>
                     );
