@@ -119,9 +119,11 @@ export default function MyTasks() {
                         href={task.template.resourceLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 underline"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
+                        title="Click to open resource link"
                       >
-                        📁 Resource Link
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Open Resource Link
                       </a>
                     )}
                   </div>

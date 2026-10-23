@@ -94,14 +94,16 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={handleResetDatabase}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-100 text-sm font-medium rounded-lg transition-all border border-red-400/30"
-              title="Reset all data"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Reset DB
-            </button>
+            {user?.role === 'ADMIN' && (
+              <button
+                onClick={handleResetDatabase}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-100 text-sm font-medium rounded-lg transition-all border border-red-400/30"
+                title="Reset all data"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reset DB
+              </button>
+            )}
             <button
               onClick={() => setViewMode('stats')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
