@@ -46,6 +46,8 @@ function mapTemplate(row: any): TaskTemplate {
     description: row.description || '',
     recurrence: row.recurrence,
     dueDay: row.due_day,
+    dueDaysOfWeek: row.due_days_of_week || [],
+    dueTime: row.due_time,
     category: row.category,
     priority: row.priority,
     resourceLink: row.resource_link,
@@ -102,6 +104,16 @@ export const DatabaseService = {
       visible: template.visible !== false, // Default to true
       created_by: template.createdBy,
     };
+
+    // Add daily recurrence fields if provided
+    if (template.recurrence === 'DAILY') {
+      if (template.dueDaysOfWeek && template.dueDaysOfWeek.length > 0) {
+        insertData.due_days_of_week = template.dueDaysOfWeek;
+      }
+      if (template.dueTime) {
+        insertData.due_time = template.dueTime;
+      }
+    }
 
     // Only add resource_link if it's provided
     if (template.resourceLink) {
@@ -275,6 +287,25 @@ export const DatabaseService = {
     } catch (error) {
       console.error('[DB] Error updating task assignments:', error);
       return false;
+    }
+  },
+
+  async getTaskAssignments(templateId: string): Promise<string[]> {
+    try {
+      const { data, error } = await supabase
+        .from('task_assignments')
+        .select('user_id')
+        .eq('template_id', templateId);
+
+      if (error) {
+        console.error('[DB] Error fetching assignments:', error);
+        return [];
+      }
+
+      return (data || []).map((a: any) => a.user_id);
+    } catch (error) {
+      console.error('[DB] Exception fetching assignments:', error);
+      return [];
     }
   },
 

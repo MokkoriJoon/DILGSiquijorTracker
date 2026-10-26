@@ -213,6 +213,10 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [visible, setVisible] = useState(true); // Toggle for private tasks
+  
+  // Daily recurrence fields
+  const [dueDaysOfWeek, setDueDaysOfWeek] = useState<string[]>([]);
+  const [dueTime, setDueTime] = useState('17:00'); // Default 5:00 PM
 
   // Role-based permissions
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
@@ -251,6 +255,10 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
       setError('Due date is required for one-time tasks');
       return;
     }
+    if (recurrence === 'DAILY' && dueDaysOfWeek.length === 0) {
+      setError('Please select at least one day for daily recurrence');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -262,7 +270,9 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
         title,
         description,
         recurrence,
-        dueDay: recurrence !== 'ONCE' ? dueDay : undefined,
+        dueDay: recurrence !== 'ONCE' && recurrence !== 'DAILY' ? dueDay : undefined,
+        dueDaysOfWeek: recurrence === 'DAILY' ? dueDaysOfWeek as any : undefined,
+        dueTime: recurrence === 'DAILY' ? dueTime : undefined,
         category,
         priority,
         resourceLink: resourceLink || undefined,
@@ -283,13 +293,32 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
       const template = result.template;
       console.log('[CreateTask] Template created:', template.id);
 
-      // Create instances for each selected user
-      console.log('[CreateTask] Creating instances for', selectedUsers.length, 'users...');
+      // Save task assignments to task_assignments table
+      console.log('[CreateTask] Saving assignments for', selectedUsers.length, 'users...');
+      const assignmentsSaved = await DatabaseService.updateTaskAssignments(template.id, selectedUsers);
+      
+      if (!assignmentsSaved) {
+        console.warn('[CreateTask] Failed to save assignments, but continuing...');
+      }
+
+      // Create initial instances for each selected user
+      console.log('[CreateTask] Creating initial instances for', selectedUsers.length, 'users...');
       for (const userId of selectedUsers) {
+        let initialDueDate: string;
+        
+        if (recurrence === 'ONCE') {
+          initialDueDate = dueDate;
+        } else if (recurrence === 'DAILY') {
+          // For daily tasks, find the next occurrence based on selected days
+          initialDueDate = calculateNextDailyDueDate(dueDaysOfWeek, dueTime);
+        } else {
+          initialDueDate = calculateNextDueDate(recurrence, dueDay);
+        }
+
         const instanceResult = await DatabaseService.createInstance({
           templateId: template.id,
           assignedTo: userId,
-          dueDate: recurrence === 'ONCE' ? dueDate : calculateNextDueDate(recurrence, dueDay),
+          dueDate: initialDueDate,
           status: 'PENDING',
         });
 
@@ -340,6 +369,43 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
     }
     
     return target.toISOString().split('T')[0];
+  };
+
+  const calculateNextDailyDueDate = (daysOfWeek: string[], dueTime: string): string => {
+    const now = new Date();
+    const dayMap: { [key: string]: number } = {
+      'SUNDAY': 0,
+      'MONDAY': 1,
+      'TUESDAY': 2,
+      'WEDNESDAY': 3,
+      'THURSDAY': 4,
+      'FRIDAY': 5,
+      'SATURDAY': 6,
+    };
+
+    // If no days selected, default to tomorrow
+    if (daysOfWeek.length === 0) {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(now.getDate() + 1);
+      return tomorrow.toISOString().split('T')[0];
+    }
+
+    // Find the next occurrence of any selected day
+    for (let i = 0; i < 7; i++) {
+      const checkDate = new Date(now);
+      checkDate.setDate(now.getDate() + i);
+      const dayOfWeek = checkDate.getDay();
+      
+      const selectedDayNumbers = daysOfWeek.map(d => dayMap[d]);
+      if (selectedDayNumbers.includes(dayOfWeek)) {
+        return checkDate.toISOString().split('T')[0];
+      }
+    }
+
+    // Fallback to tomorrow
+    const tomorrow = new Date(now);
+    tomorrow.setDate(now.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
   };
 
   return (
@@ -444,6 +510,17 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+            ) : recurrence === 'DAILY' ? (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Due Time</label>
+                <input
+                  type="time"
+                  value={dueTime}
+                  onChange={(e) => setDueTime(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Time when task is due (24-hour format)</p>
+              </div>
             ) : (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Due Day of Month</label>
@@ -459,6 +536,148 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
               </div>
             )}
           </div>
+
+          {/* Daily Recurrence - Day Selection */}
+          {recurrence === 'DAILY' && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Recur on哪些 days? *
+              </label>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('MONDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'MONDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'MONDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Monday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('TUESDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'TUESDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'TUESDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Tuesday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('WEDNESDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'WEDNESDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'WEDNESDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Wednesday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('THURSDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'THURSDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'THURSDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Thursday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('FRIDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'FRIDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'FRIDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Friday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('SATURDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'SATURDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'SATURDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Saturday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('SUNDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'SUNDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'SUNDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Sunday</span>
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDueDaysOfWeek(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'])}
+                  className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Monday-Friday
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDueDaysOfWeek(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'])}
+                  className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Whole Week
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDueDaysOfWeek([])}
+                  className="px-3 py-1 text-xs bg-slate-200 text-slate-700 rounded hover:bg-slate-300"
+                >
+                  Clear
+                </button>
+              </div>
+              <p className="text-xs text-blue-700 mt-2">
+                Select which days of the week this task should recur
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
