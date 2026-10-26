@@ -346,6 +346,7 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
           templateId: template.id,
           assignedTo: userId,
           dueDate: initialDueDate,
+          dueTime: recurrence === 'DAILY' ? dueTime : undefined,
           status: 'PENDING',
         });
 
