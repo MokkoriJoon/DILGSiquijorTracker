@@ -14,6 +14,7 @@ import {
   Building2,
   ChevronRight,
   RefreshCw,
+  Folder,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -41,6 +42,7 @@ export default function Layout({ children }: LayoutProps) {
     ? [
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { path: '/my-tasks', label: 'My Tasks', icon: ClipboardList },
+        { path: '/categories', label: 'Task Categories', icon: Folder },
         { path: '/tasks', label: 'Task Management', icon: ClipboardList },
         { path: '/users', label: 'User Management', icon: Users },
         { path: '/scheduler', label: 'Scheduler', icon: RefreshCw },
@@ -50,12 +52,14 @@ export default function Layout({ children }: LayoutProps) {
     ? [
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { path: '/my-tasks', label: 'My Tasks', icon: ClipboardList },
+        { path: '/categories', label: 'Task Categories', icon: Folder },
         { path: '/tasks', label: 'Task Management', icon: ClipboardList },
         { path: '/profile', label: 'My Profile', icon: Shield },
       ]
     : [
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { path: '/my-tasks', label: 'My Tasks', icon: ClipboardList },
+        { path: '/categories', label: 'Task Categories', icon: Folder },
         { path: '/profile', label: 'My Profile', icon: Shield },
       ];
 

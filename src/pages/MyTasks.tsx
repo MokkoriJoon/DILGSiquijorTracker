@@ -10,6 +10,7 @@ export default function MyTasks() {
   const [loading, setLoading] = useState(true);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [taskToComplete, setTaskToComplete] = useState<TaskInstance | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   useEffect(() => {
     loadTasks();
@@ -23,12 +24,24 @@ export default function MyTasks() {
     setLoading(false);
   }
 
+  const handleStatClick = (status: string) => {
+    setStatusFilter(status === statusFilter ? null : status);
+  };
+
   const statusCounts = {
     all: tasks.length,
     PENDING: tasks.filter(t => t.status === 'PENDING' || t.status === 'IN_PROGRESS' || t.status === 'SUBMITTED').length,
     COMPLETED: tasks.filter(t => t.status === 'COMPLETED').length,
     OVERDUE: tasks.filter(t => t.status === 'OVERDUE').length,
   };
+
+  const filteredTasks = tasks.filter(task => {
+    if (!statusFilter || statusFilter === 'ALL') return true;
+    if (statusFilter === 'PENDING') {
+      return task.status === 'PENDING' || task.status === 'IN_PROGRESS' || task.status === 'SUBMITTED';
+    }
+    return task.status === statusFilter;
+  });
 
   async function handleCompleteTask(task: TaskInstance) {
     setTaskToComplete(task);
@@ -60,30 +73,62 @@ export default function MyTasks() {
         <h1 className="text-xl font-bold">My Tasks</h1>
         <p className="text-blue-100 text-sm mt-1">Track and manage your assigned tasks</p>
         <div className="flex flex-wrap gap-3 mt-4">
-          <div className="bg-white/10 rounded-lg px-4 py-2">
+          <button
+            onClick={() => handleStatClick('COMPLETED')}
+            className={`bg-white/10 rounded-lg px-4 py-2 cursor-pointer transition-all hover:bg-white/20 ${
+              statusFilter === 'COMPLETED' ? 'ring-2 ring-white bg-white/30' : ''
+            }`}
+          >
             <p className="text-2xl font-bold">{statusCounts.COMPLETED}</p>
             <p className="text-xs text-blue-200">Completed</p>
-          </div>
-          <div className="bg-white/10 rounded-lg px-4 py-2">
+          </button>
+          <button
+            onClick={() => handleStatClick('OVERDUE')}
+            className={`bg-white/10 rounded-lg px-4 py-2 cursor-pointer transition-all hover:bg-white/20 ${
+              statusFilter === 'OVERDUE' ? 'ring-2 ring-white bg-white/30' : ''
+            }`}
+          >
             <p className="text-2xl font-bold">{statusCounts.OVERDUE}</p>
             <p className="text-xs text-blue-200">Overdue</p>
-          </div>
-          <div className="bg-white/10 rounded-lg px-4 py-2">
+          </button>
+          <button
+            onClick={() => handleStatClick('PENDING')}
+            className={`bg-white/10 rounded-lg px-4 py-2 cursor-pointer transition-all hover:bg-white/20 ${
+              statusFilter === 'PENDING' ? 'ring-2 ring-white bg-white/30' : ''
+            }`}
+          >
             <p className="text-2xl font-bold">{statusCounts.PENDING}</p>
             <p className="text-xs text-blue-200">Pending</p>
-          </div>
+          </button>
         </div>
+        {statusFilter && (
+          <div className="mt-4 flex items-center gap-3">
+            <span className="text-sm text-blue-100">
+              Showing: <span className="font-bold">{statusFilter}</span> ({filteredTasks.length} tasks)
+            </span>
+            <button
+              onClick={() => setStatusFilter(null)}
+              className="px-3 py-1 bg-white/20 hover:bg-white/30 text-white text-sm rounded-lg transition-colors"
+            >
+              View All Tasks
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">
-        {tasks.length === 0 ? (
+        {filteredTasks.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
             <CheckCircle2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-sm font-semibold text-slate-700">No tasks assigned yet</h3>
-            <p className="text-xs text-slate-500 mt-1">Tasks will appear here when assigned by an admin</p>
+            <h3 className="text-sm font-semibold text-slate-700">
+              {statusFilter ? `No ${statusFilter.toLowerCase()} tasks` : 'No tasks assigned yet'}
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              {statusFilter ? 'Try viewing all tasks' : 'Tasks will appear here when assigned by an admin'}
+            </p>
           </div>
         ) : (
-          tasks.map((task) => (
+          filteredTasks.map((task) => (
             <div key={task.id} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-all">
               <div className="flex items-start gap-4">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${

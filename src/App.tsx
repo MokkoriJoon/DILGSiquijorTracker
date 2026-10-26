@@ -12,6 +12,7 @@ import UserManagement from './pages/UserManagement';
 import MyTasks from './pages/MyTasks';
 import SchedulerPage from './pages/SchedulerPage';
 import Profile from './pages/Profile';
+import TaskCategories from './pages/TaskCategories';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { user, loading } = useAuth();
@@ -86,6 +87,11 @@ function AppRoutes() {
       <Route path="/profile" element={
         <ProtectedRoute>
           <Profile />
+        </ProtectedRoute>
+      } />
+      <Route path="/categories" element={
+        <ProtectedRoute>
+          <TaskCategories />
         </ProtectedRoute>
       } />
       
