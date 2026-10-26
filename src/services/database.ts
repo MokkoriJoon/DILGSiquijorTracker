@@ -49,6 +49,7 @@ function mapTemplate(row: any): TaskTemplate {
     category: row.category,
     priority: row.priority,
     resourceLink: row.resource_link,
+    visible: row.visible !== false, // Default to true if not set
     createdBy: row.created_by,
     createdAt: row.created_at,
   };
@@ -98,6 +99,7 @@ export const DatabaseService = {
       due_day: template.dueDay,
       category: template.category,
       priority: template.priority,
+      visible: template.visible !== false, // Default to true
       created_by: template.createdBy,
     };
 
@@ -278,15 +280,21 @@ export const DatabaseService = {
 
   // ============ TASK INSTANCES ============
   
-  async getInstances(): Promise<TaskInstance[]> {
-    const { data, error } = await supabase
+  async getInstances(options?: { userId?: string; includeInvisible?: boolean }): Promise<TaskInstance[]> {
+    let query = supabase
       .from('task_instances')
       .select(`
         *,
         template:task_templates(*),
         assignee:users!task_instances_assigned_to_fkey(*)
-      `)
-      .order('due_date', { ascending: true });
+      `);
+
+    // If not including invisible tasks, filter them out
+    if (!options?.includeInvisible) {
+      query = query.eq('template.visible', true);
+    }
+
+    const { data, error } = await query.order('due_date', { ascending: true });
     
     if (error) {
       console.error('[DB] Error fetching instances:', error);
@@ -297,6 +305,7 @@ export const DatabaseService = {
   },
 
   async getInstancesByUser(userId: string): Promise<TaskInstance[]> {
+    // Get ALL tasks for the user, including invisible ones
     const { data, error } = await supabase
       .from('task_instances')
       .select(`

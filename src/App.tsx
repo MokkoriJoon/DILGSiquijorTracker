@@ -13,6 +13,7 @@ import MyTasks from './pages/MyTasks';
 import SchedulerPage from './pages/SchedulerPage';
 import Profile from './pages/Profile';
 import TaskCategories from './pages/TaskCategories';
+import ResourceLinks from './pages/ResourceLinks';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { user, loading } = useAuth();
@@ -92,6 +93,11 @@ function AppRoutes() {
       <Route path="/categories" element={
         <ProtectedRoute>
           <TaskCategories />
+        </ProtectedRoute>
+      } />
+      <Route path="/resource-links" element={
+        <ProtectedRoute>
+          <ResourceLinks />
         </ProtectedRoute>
       } />
       

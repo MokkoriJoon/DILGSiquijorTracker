@@ -35,7 +35,8 @@ export default function AdminDashboard() {
     if (dashboardScope === 'my' && user) {
       instancesData = await DatabaseService.getInstancesByUser(user.id);
     } else {
-      instancesData = await DatabaseService.getInstances();
+      // For "All Tasks" view, include invisible tasks (admin can see everything)
+      instancesData = await DatabaseService.getInstances({ includeInvisible: true });
     }
     
     // Calculate stats with merged categories
@@ -51,7 +52,11 @@ export default function AdminDashboard() {
   }
 
   const handleStatClick = (status: string) => {
-    setStatusFilter(status);
+    if (status === 'ALL') {
+      setStatusFilter(null);
+    } else {
+      setStatusFilter(status);
+    }
     setViewMode('kanban');
   };
 
@@ -68,7 +73,7 @@ export default function AdminDashboard() {
   ];
 
   const statCards = [
-    { label: 'Total Tasks', value: stats.total, icon: ClipboardList, change: '+12%', color: 'from-blue-500 to-blue-600', status: null },
+    { label: 'All Tasks', value: stats.total, icon: ClipboardList, change: '+12%', color: 'from-blue-500 to-blue-600', status: 'ALL' },
     { label: 'Completed', value: stats.completed, icon: CheckCircle2, change: '+8%', color: 'from-emerald-500 to-emerald-600', status: 'COMPLETED' },
     { label: 'Pending', value: stats.pending, icon: Clock, change: '+3%', color: 'from-amber-500 to-amber-600', status: 'PENDING' },
     { label: 'Overdue', value: stats.overdue, icon: AlertTriangle, change: '-2%', color: 'from-red-500 to-red-600', status: 'OVERDUE' },
@@ -331,7 +336,7 @@ export default function AdminDashboard() {
           )}
           <div className="flex gap-4 min-w-max pb-4">
             {kanbanColumns
-              .filter(column => !statusFilter || column.status === statusFilter)
+              .filter(column => !statusFilter || statusFilter === 'ALL' || column.status === statusFilter)
               .map((column) => {
                 const tasks = instances.filter(t => {
                   // Merge IN_PROGRESS and SUBMITTED into PENDING for display

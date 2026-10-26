@@ -26,7 +26,8 @@ export default function PublicDashboard() {
 
   async function loadData() {
     setLoading(true);
-    const instancesData = await DatabaseService.getInstances();
+    // Public dashboard should NOT include invisible tasks
+    const instancesData = await DatabaseService.getInstances({ includeInvisible: false });
     
     // Calculate stats with merged categories
     const total = instancesData.length;
@@ -237,7 +238,7 @@ export default function PublicDashboard() {
         )}
 
         {/* Completion Rate Banner */}
-        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-6 mb-8 text-white shadow-lg">
+        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-6 mb-6 text-white shadow-lg">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
@@ -257,57 +258,60 @@ export default function PublicDashboard() {
           </div>
         </div>
 
-        {/* Charts - Compact */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          {/* Department Performance */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
-            <h3 className="text-sm font-semibold text-slate-800 mb-2">Completion by Municipality</h3>
-            {departmentData().length > 0 ? (
-              <div className="h-40">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={departmentData()} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis type="number" tick={{ fontSize: 10 }} stroke="#94a3b8" domain={[0, 100]} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} stroke="#94a3b8" width={100} />
-                    <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
-                    <Bar dataKey="completionRate" fill="#1e40af" radius={[0, 4, 4, 0]} name="Completion %" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-40 flex items-center justify-center text-slate-400 text-xs">
-                No data available yet
-              </div>
-            )}
+        {/* Main Content: Charts on left, Tasks on right */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Charts Column - Left Side */}
+          <div className="lg:col-span-1 space-y-4">
+            {/* Department Performance */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+              <h3 className="text-sm font-semibold text-slate-800 mb-2">By Municipality</h3>
+              {departmentData().length > 0 ? (
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={departmentData()} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis type="number" tick={{ fontSize: 9 }} stroke="#94a3b8" domain={[0, 100]} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 8 }} stroke="#94a3b8" width={80} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '10px' }} />
+                      <Bar dataKey="completionRate" fill="#1e40af" radius={[0, 4, 4, 0]} name="Completion %" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-48 flex items-center justify-center text-slate-400 text-xs">
+                  No data available yet
+                </div>
+              )}
+            </div>
+
+            {/* Status Breakdown */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+              <h3 className="text-sm font-semibold text-slate-800 mb-2">Status Breakdown</h3>
+              {statusData.length > 0 ? (
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={statusData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} dataKey="value">
+                        {statusData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ fontSize: '10px' }} />
+                      <Legend wrapperStyle={{ fontSize: '10px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="h-48 flex items-center justify-center text-slate-400 text-xs">
+                  No tasks yet
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Status Breakdown */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
-            <h3 className="text-sm font-semibold text-slate-800 mb-2">Task Status Breakdown</h3>
-            {statusData.length > 0 ? (
-              <div className="h-40">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={35} outerRadius={60} paddingAngle={2} dataKey="value">
-                      {statusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ fontSize: '11px' }} />
-                    <Legend wrapperStyle={{ fontSize: '11px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-40 flex items-center justify-center text-slate-400 text-xs">
-                No tasks yet
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* All Tasks - Read Only Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 mb-8">
+          {/* Tasks Table Column - Right Side */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold text-slate-800">
               {statusFilter ? `Filtered Tasks - ${statusFilter}` : 'All Tasks (Read-Only View)'}
@@ -422,6 +426,8 @@ export default function PublicDashboard() {
               </table>
             </div>
           )}
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
