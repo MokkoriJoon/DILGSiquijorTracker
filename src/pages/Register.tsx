@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Building2, UserPlus, Eye, EyeOff, ArrowLeft, AlertCircle, Shield } from 'lucide-react';
 import { DEPARTMENTS } from '../data/mockData';
+import { formatNameInput } from '../utils/format';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -54,9 +55,14 @@ export default function Register() {
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    
+    // Auto-format name field with proper capitalization
+    const formattedValue = name === 'name' ? formatNameInput(value) : value;
+    
     setFormData(prev => ({
       ...prev,
-      [e.target.name]: e.target.value,
+      [name]: formattedValue,
     }));
     setError(''); // Clear error on input
   };

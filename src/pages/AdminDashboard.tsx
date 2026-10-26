@@ -10,6 +10,7 @@ import {
   ArrowUpRight, Zap, RotateCcw
 } from 'lucide-react';
 import type { TaskInstance, TaskStatus } from '../types';
+import { formatName } from '../utils/format';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -201,59 +202,62 @@ export default function AdminDashboard() {
 
       {viewMode === 'stats' ? (
         <>
-          {/* Charts Row - Completion Overview, Department Rates, and Overdue Tasks */}
+          {/* Charts Row - Stacked charts on left, wider overdue list on right */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Completion Overview - Smaller width */}
-            <div className="lg:col-span-3 bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3">Completion Overview</h3>
-              <div className="flex items-center justify-center">
-                <div className="text-center">
-                  <div className="relative w-24 h-24 mx-auto">
-                    <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 120 120">
-                      <circle cx="60" cy="60" r="50" stroke="#e2e8f0" strokeWidth="10" fill="none" />
-                      <circle
-                        cx="60" cy="60" r="50"
-                        stroke="#10b981"
-                        strokeWidth="10"
-                        fill="none"
-                        strokeDasharray={`${stats.completionRate * 3.14} ${314 - stats.completionRate * 3.14}`}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-xl font-bold text-slate-800">{stats.completionRate}%</span>
+            {/* Left Column - Stacked Charts */}
+            <div className="lg:col-span-3 space-y-6">
+              {/* Completion Overview */}
+              <div className="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-800 mb-3">Completion Overview</h3>
+                <div className="flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="relative w-24 h-24 mx-auto">
+                      <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r="50" stroke="#e2e8f0" strokeWidth="10" fill="none" />
+                        <circle
+                          cx="60" cy="60" r="50"
+                          stroke="#10b981"
+                          strokeWidth="10"
+                          fill="none"
+                          strokeDasharray={`${stats.completionRate * 3.14} ${314 - stats.completionRate * 3.14}`}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-xl font-bold text-slate-800">{stats.completionRate}%</span>
+                      </div>
                     </div>
+                    <p className="text-xs text-slate-500 mt-2">Overall Completion Rate</p>
+                    <p className="text-xs text-slate-400">{stats.completed} of {stats.total} tasks</p>
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">Overall Completion Rate</p>
-                  <p className="text-xs text-slate-400">{stats.completed} of {stats.total} tasks</p>
+                </div>
+              </div>
+
+              {/* Department Completion Rates */}
+              <div className="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-800 mb-3">Department Rates</h3>
+                <div className="h-40">
+                  {departmentChartData().length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={departmentChartData()} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis type="number" tick={{ fontSize: 9 }} stroke="#94a3b8" domain={[0, 100]} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 8 }} stroke="#94a3b8" width={80} />
+                        <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '10px' }} />
+                        <Bar dataKey="completionRate" fill="#1e40af" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-slate-400 text-xs">
+                      No data yet
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Department Completion Rates - Smaller width */}
-            <div className="lg:col-span-3 bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-800 mb-3">Department Rates</h3>
-              <div className="h-40">
-                {departmentChartData().length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={departmentChartData()} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis type="number" tick={{ fontSize: 9 }} stroke="#94a3b8" domain={[0, 100]} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 8 }} stroke="#94a3b8" width={80} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '10px' }} />
-                      <Bar dataKey="completionRate" fill="#1e40af" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-slate-400 text-xs">
-                    No data yet
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Overdue & At Risk Tasks - Wider */}
-            <div className="lg:col-span-6 bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
+            {/* Right Column - Overdue & At Risk Tasks (wider) */}
+            <div className="lg:col-span-9 bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-slate-800">Overdue & At Risk Tasks</h3>
                 <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">
@@ -269,7 +273,7 @@ export default function AdminDashboard() {
                       <div className={`w-2 h-2 rounded-full ${task.status === 'OVERDUE' ? 'bg-red-500' : 'bg-amber-500'}`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-700 truncate">{task.template?.title}</p>
-                        <p className="text-xs text-slate-500">{task.assignee?.name} • {task.assignee?.department}</p>
+                        <p className="text-xs text-slate-500">{task.assignee?.name ? formatName(task.assignee.name) : 'Unassigned'} • {task.assignee?.department}</p>
                       </div>
                       <div className="text-right">
                         <p className="text-xs font-medium text-slate-600">Due: {task.dueDate}</p>
@@ -346,9 +350,9 @@ export default function AdminDashboard() {
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
-                            <span className="text-[9px] font-bold text-blue-700">{task.assignee?.name?.charAt(0)}</span>
+                            <span className="text-[9px] font-bold text-blue-700">{task.assignee?.name ? formatName(task.assignee.name).charAt(0) : '?'}</span>
                           </div>
-                          <span className="text-[10px] text-slate-500 truncate">{task.assignee?.name}</span>
+                          <span className="text-[10px] text-slate-500 truncate">{task.assignee?.name ? formatName(task.assignee.name) : 'Unassigned'}</span>
                         </div>
                         <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
                           <span className="text-[10px] text-slate-400 flex items-center gap-1">
