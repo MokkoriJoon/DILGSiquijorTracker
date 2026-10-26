@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DatabaseService, UserService } from '../services/database';
 import { Plus, Search, Shield, User, Edit2, Trash2, X, Key } from 'lucide-react';
 import { DEPARTMENTS } from '../data/mockData';
+import { formatName, formatNameInput } from '../utils/format';
 
 export default function UserManagement() {
   const [users, setUsers] = useState<any[]>([]);
@@ -86,10 +87,10 @@ export default function UserManagement() {
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full flex items-center justify-center">
-                      <span className="text-sm font-bold text-white">{user.name.charAt(0)}</span>
+                      <span className="text-sm font-bold text-white">{formatName(user.name).charAt(0)}</span>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-800">{user.name}</p>
+                      <p className="text-sm font-medium text-slate-800">{formatName(user.name)}</p>
                       <p className="text-xs text-slate-500">{user.email}</p>
                     </div>
                   </div>
@@ -130,7 +131,7 @@ export default function UserManagement() {
                       <Edit2 className="w-4 h-4 text-blue-600" />
                     </button>
                     <button
-                      onClick={() => handleDelete(user.id, user.name)}
+                      onClick={() => handleDelete(user.id, formatName(user.name))}
                       className="p-2 hover:bg-red-50 rounded-lg transition-colors"
                       title="Delete"
                     >
@@ -246,7 +247,7 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setName(formatNameInput(e.target.value))}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               placeholder="Juan Dela Cruz"
             />
@@ -406,7 +407,7 @@ function EditUserModal({ user, onClose, onUpdated }: { user: any; onClose: () =>
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setName(formatNameInput(e.target.value))}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
             />
           </div>

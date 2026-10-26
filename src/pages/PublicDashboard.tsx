@@ -10,6 +10,7 @@ import {
   Building2, Shield, Users, CheckCircle2, Clock, AlertTriangle,
   ClipboardList, TrendingUp, Calendar, Eye
 } from 'lucide-react';
+import { formatName } from '../utils/format';
 
 export default function PublicDashboard() {
   const [stats, setStats] = useState({
@@ -344,10 +345,10 @@ export default function PublicDashboard() {
                                 <div className="flex items-center gap-2">
                                   <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center">
                                     <span className="text-xs font-bold text-blue-700">
-                                      {task.assignee?.name?.charAt(0) || '?'}
+                                      {task.assignee?.name ? formatName(task.assignee.name).charAt(0) : '?'}
                                     </span>
                                   </div>
-                                  <span className="text-sm text-slate-700">{task.assignee?.name || 'Unassigned'}</span>
+                                  <span className="text-sm text-slate-700">{task.assignee?.name ? formatName(task.assignee.name) : 'Unassigned'}</span>
                                 </div>
                               </td>
                               <td className="px-4 py-3">

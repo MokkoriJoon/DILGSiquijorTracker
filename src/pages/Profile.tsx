@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { User, Shield, Mail, Building2, Calendar } from 'lucide-react';
+import { formatName } from '../utils/format';
 
 export default function Profile() {
   const { user } = useAuth();
@@ -12,10 +13,10 @@ export default function Profile() {
       <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
-            <span className="text-2xl font-bold">{user.name.charAt(0)}</span>
+            <span className="text-2xl font-bold">{formatName(user.name).charAt(0)}</span>
           </div>
           <div>
-            <h1 className="text-xl font-bold">{user.name}</h1>
+            <h1 className="text-xl font-bold">{formatName(user.name)}</h1>
             <p className="text-blue-100 text-sm">{user.department}</p>
             <div className="flex items-center gap-2 mt-1">
               <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
@@ -41,7 +42,7 @@ export default function Profile() {
             <User className="w-4 h-4 text-slate-400" />
             <div>
               <p className="text-[10px] uppercase text-slate-500 font-semibold">Full Name</p>
-              <p className="text-sm font-medium text-slate-800">{user.name}</p>
+              <p className="text-sm font-medium text-slate-800">{formatName(user.name)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
