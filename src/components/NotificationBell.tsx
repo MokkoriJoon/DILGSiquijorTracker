@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell, Check, Trash2, Calendar, AlertCircle, Clock, CheckCircle2, RefreshCw } from 'lucide-react';
 import { NotificationService, Notification, NotificationType } from '../services/notification';
 import { useAuth } from '../context/AuthContext';
 
 export function NotificationBell() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -110,7 +112,15 @@ export function NotificationBell() {
   }
 
   function formatDate(dateString: string) {
+    if (!dateString) return 'Unknown date';
+    
     const date = new Date(dateString);
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return 'Invalid date';
+    }
+    
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -122,6 +132,34 @@ export function NotificationBell() {
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
     return date.toLocaleDateString();
+  }
+
+  function handleNotificationClick(notification: Notification) {
+    // Mark as read when clicked
+    if (!notification.read) {
+      NotificationService.markAsRead(notification.id).then(() => {
+        loadNotifications();
+      });
+    }
+
+    // Navigate based on notification type
+    switch (notification.type) {
+      case 'task_assigned':
+      case 'task_completed':
+      case 'reminder_3days':
+      case 'reminder_1day':
+      case 'overdue':
+      case 'recurrence_generated':
+        // All task-related notifications go to My Tasks
+        navigate('/my-tasks');
+        break;
+      default:
+        // Default to My Tasks for unknown types
+        navigate('/my-tasks');
+    }
+
+    // Close the notification panel
+    setIsOpen(false);
   }
 
   if (!user) return null;
@@ -192,7 +230,8 @@ export function NotificationBell() {
                   {notifications.map((notification) => (
                     <div
                       key={notification.id}
-                      className={`px-4 py-3 hover:bg-slate-50 transition-colors ${
+                      onClick={() => handleNotificationClick(notification)}
+                      className={`px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer ${
                         !notification.read ? 'bg-blue-50/30' : ''
                       }`}
                     >
@@ -214,7 +253,10 @@ export function NotificationBell() {
                               </p>
                             </div>
                             <button
-                              onClick={() => handleDelete(notification.id)}
+                              onClick={(e) => {
+                                e.stopPropagation(); // Prevent navigation when deleting
+                                handleDelete(notification.id);
+                              }}
                               className="flex-shrink-0 p-1 text-slate-400 hover:text-red-500 rounded transition-colors"
                               title="Delete notification"
                             >
@@ -227,7 +269,10 @@ export function NotificationBell() {
                             </span>
                             {!notification.read && (
                               <button
-                                onClick={() => handleMarkAsRead(notification.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation(); // Prevent navigation when marking as read
+                                  handleMarkAsRead(notification.id);
+                                }}
                                 className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                               >
                                 Mark as read
