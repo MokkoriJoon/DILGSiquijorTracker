@@ -26,6 +26,7 @@ export default function SchedulerDebug() {
     
     addLog(`📅 Current date: ${today}`);
     addLog(`⏰ Current time: ${currentTime}`);
+    addLog(`🕐 Full timestamp: ${now.toISOString()}`);
 
     // Get database time
     const { data: dbTime } = await supabase.rpc('get_current_timestamp');
@@ -127,6 +128,27 @@ export default function SchedulerDebug() {
     setRunning(false);
   };
 
+  const manuallyMarkOverdue = async (taskId: string) => {
+    if (!confirm('Are you sure you want to manually mark this task as OVERDUE?')) {
+      return;
+    }
+
+    addLog(`🔧 Manually marking task ${taskId} as OVERDUE...`);
+
+    const { error } = await supabase
+      .from('task_instances')
+      .update({ status: 'OVERDUE' })
+      .eq('id', taskId);
+
+    if (error) {
+      addLog(`❌ Error: ${error.message}`);
+    } else {
+      addLog(`✅ Task marked as OVERDUE successfully`);
+      // Refresh the diagnostics
+      await runDiagnostics();
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'OVERDUE': return 'bg-red-100 text-red-700';
@@ -181,6 +203,7 @@ export default function SchedulerDebug() {
                   <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Due Time</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Should Be Overdue?</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Reason</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -210,11 +233,38 @@ export default function SchedulerDebug() {
                       )}
                     </td>
                     <td className="px-4 py-2 text-xs text-slate-600">{task.reason}</td>
+                    <td className="px-4 py-2">
+                      {task.should_be_overdue && task.status !== 'OVERDUE' && task.status !== 'COMPLETED' && (
+                        <button
+                          onClick={() => manuallyMarkOverdue(task.id)}
+                          className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                        >
+                          Mark Overdue
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Time Comparison Section */}
+      {logs.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-yellow-900 mb-2">⏰ Time Comparison Details</h3>
+          <div className="text-xs text-yellow-800 space-y-1 font-mono">
+            {logs
+              .filter(log => log.includes('time check') || log.includes('normalized_due_time'))
+              .map((log, i) => (
+                <div key={i}>{log}</div>
+              ))}
+          </div>
+          <p className="text-xs text-yellow-700 mt-2">
+            💡 If the time comparison looks wrong, check if your database stores time in a different format.
+          </p>
         </div>
       )}
 
@@ -225,7 +275,8 @@ export default function SchedulerDebug() {
           <li>Click "Run Diagnostics" to analyze all tasks</li>
           <li>Check the logs to see what the scheduler is doing</li>
           <li>Look at the task analysis table to see which tasks should be overdue</li>
-          <li>If tasks are not being marked as overdue, share the logs and task details</li>
+          <li>If a task should be overdue but isn't, click "Mark Overdue" to manually fix it</li>
+          <li>If tasks are still not being marked correctly, share the logs and task details</li>
         </ol>
       </div>
     </div>
