@@ -160,7 +160,7 @@ export default function PublicDashboard() {
                 </div>
               </div>
               <p className="text-blue-100 max-w-xl text-sm lg:text-base">
-                Real-time monitoring of departmental programs and upcoming tasks across DILG Siquijor Provincial Office.
+                Real-time monitoring of departmental programs and upcoming tasks across DILG Siquijor Provincial Office and all Municipalities.
               </p>
             </div>
             <div className="flex gap-3">
