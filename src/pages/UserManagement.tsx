@@ -75,6 +75,7 @@ export default function UserManagement() {
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">User</th>
+              <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Position</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Department</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Role</th>
               <th className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Joined</th>
@@ -94,6 +95,9 @@ export default function UserManagement() {
                       <p className="text-xs text-slate-500">{user.email}</p>
                     </div>
                   </div>
+                </td>
+                <td className="px-6 py-4">
+                  <span className="text-sm text-slate-600">{user.position || '-'}</span>
                 </td>
                 <td className="px-6 py-4">
                   <span className="text-sm text-slate-600">{user.department}</span>
@@ -190,6 +194,7 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [position, setPosition] = useState('');
   const [department, setDepartment] = useState<string>(DEPARTMENTS[0]);
   const [role, setRole] = useState<'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'>('STANDARD');
   const [loading, setLoading] = useState(false);
@@ -212,6 +217,7 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
       name,
       email,
       password,
+      position,
       department,
       role,
     });
@@ -261,6 +267,17 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
               placeholder="user@dilg.gov.ph"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Position</label>
+            <input
+              type="text"
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g., Administrative Officer, IT Specialist"
             />
           </div>
 
@@ -338,6 +355,7 @@ function AddUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
 
 function EditUserModal({ user, onClose, onUpdated }: { user: any; onClose: () => void; onUpdated: () => void }) {
   const [name, setName] = useState(user.name);
+  const [position, setPosition] = useState(user.position || '');
   const [department, setDepartment] = useState(user.department);
   const [role, setRole] = useState<'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'>(user.role);
   const [password, setPassword] = useState('');
@@ -358,7 +376,7 @@ function EditUserModal({ user, onClose, onUpdated }: { user: any; onClose: () =>
     setLoading(true);
     setError('');
 
-    const updates: any = { name, department, role };
+    const updates: any = { name, position, department, role };
     if (password) {
       updates.password = password;
     }
@@ -409,6 +427,17 @@ function EditUserModal({ user, onClose, onUpdated }: { user: any; onClose: () =>
               value={name}
               onChange={(e) => setName(formatNameInput(e.target.value))}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Position</label>
+            <input
+              type="text"
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g., Administrative Officer, IT Specialist"
             />
           </div>
 

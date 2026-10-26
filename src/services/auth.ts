@@ -294,6 +294,7 @@ export const AuthService = {
       name: row.name,
       role: row.role as Role,
       department: row.department,
+      position: row.position,
       createdAt: row.created_at,
     };
   },

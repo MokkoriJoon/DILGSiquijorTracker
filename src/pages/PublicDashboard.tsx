@@ -151,13 +151,6 @@ export default function PublicDashboard() {
                 <Shield className="w-4 h-4" />
                 Staff Login
               </Link>
-              <Link
-                to="/register"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium rounded-lg transition-all border border-white/20"
-              >
-                <Users className="w-4 h-4" />
-                Register
-              </Link>
             </div>
           </div>
         </div>
@@ -278,7 +271,7 @@ export default function PublicDashboard() {
                   📅 Upcoming Tasks (Next 7 Days)
                 </h3>
                 <span className="text-xs text-slate-500">
-                  Reminder view - tasks due soon
+                  Reminder View
                 </span>
               </div>
               

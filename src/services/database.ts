@@ -452,6 +452,7 @@ export const DatabaseService = {
     email: string;
     name: string;
     department: string;
+    position?: string;
     role: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD';
     password: string;
   }) {
@@ -463,6 +464,7 @@ export const DatabaseService = {
         data: {
           full_name: userData.name,
           department: userData.department,
+          position: userData.position,
           role: userData.role,
         },
       },
@@ -479,6 +481,7 @@ export const DatabaseService = {
         email: userData.email,
         name: userData.name,
         department: userData.department,
+        position: userData.position,
         role: userData.role,
         password: userData.password, // Store plain text password for admin view
       }, { onConflict: 'id' });
@@ -499,11 +502,12 @@ export const DatabaseService = {
     return !error;
   },
 
-  async updateUser(id: string, updates: { name?: string; department?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'; password?: string }): Promise<{ success: boolean; error?: string }> {
+  async updateUser(id: string, updates: { name?: string; department?: string; position?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'; password?: string }): Promise<{ success: boolean; error?: string }> {
     const updateData: any = {};
     
     if (updates.name !== undefined) updateData.name = updates.name;
     if (updates.department !== undefined) updateData.department = updates.department;
+    if (updates.position !== undefined) updateData.position = updates.position;
     if (updates.role !== undefined) updateData.role = updates.role;
     if (updates.password !== undefined) updateData.password = updates.password;
 
