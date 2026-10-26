@@ -231,6 +231,25 @@ export const NotificationService = {
     return true;
   },
 
+  // Delete all notifications for a user
+  async deleteAllNotifications(userId: string): Promise<{ success: boolean; count: number; error?: string }> {
+    console.log('[Notification] Deleting all notifications for user:', userId);
+
+    const { data, error, count } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('user_id', userId)
+      .select();
+
+    if (error) {
+      console.error('[Notification] Error deleting all notifications:', error);
+      return { success: false, count: 0, error: error.message };
+    }
+
+    console.log('[Notification] Deleted', count || 0, 'notifications');
+    return { success: true, count: count || 0 };
+  },
+
   // Generate reminder notifications
   async generateReminders(): Promise<{ created: number; errors: string[] }> {
     const errors: string[] = [];
