@@ -14,7 +14,7 @@ import type { TaskInstance, TaskStatus } from '../types';
 export default function AdminDashboard() {
   const { user } = useAuth();
   const [viewMode, setViewMode] = useState<'stats' | 'kanban'>('stats');
-  const [dashboardScope, setDashboardScope] = useState<'all' | 'my'>('all');
+  const [dashboardScope, setDashboardScope] = useState<'all' | 'my'>('my'); // Default to 'my' for logged-in users
   const [stats, setStats] = useState({
     total: 0, completed: 0, pending: 0, overdue: 0, completionRate: 0
   });

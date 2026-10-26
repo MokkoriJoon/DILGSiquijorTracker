@@ -18,6 +18,7 @@ export default function PublicDashboard() {
   const [instances, setInstances] = useState<TaskInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [displayCount, setDisplayCount] = useState(10);
 
   useEffect(() => {
     loadData();
@@ -45,6 +46,11 @@ export default function PublicDashboard() {
 
   const handleStatClick = (status: string) => {
     setStatusFilter(status === statusFilter ? null : status);
+    setDisplayCount(10); // Reset pagination when filter changes
+  };
+
+  const handleShowMore = () => {
+    setDisplayCount(prev => prev + 10);
   };
 
   // Build department chart data
@@ -251,49 +257,49 @@ export default function PublicDashboard() {
           </div>
         </div>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        {/* Charts - Compact */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
           {/* Department Performance */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-            <h3 className="text-base font-semibold text-slate-800 mb-4">Completion by Municipality</h3>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+            <h3 className="text-sm font-semibold text-slate-800 mb-2">Completion by Municipality</h3>
             {departmentData().length > 0 ? (
-              <div className="h-64">
+              <div className="h-40">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={departmentData()} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" domain={[0, 100]} />
-                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} stroke="#94a3b8" width={120} />
-                    <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }} />
+                    <XAxis type="number" tick={{ fontSize: 10 }} stroke="#94a3b8" domain={[0, 100]} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} stroke="#94a3b8" width={100} />
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '11px' }} />
                     <Bar dataKey="completionRate" fill="#1e40af" radius={[0, 4, 4, 0]} name="Completion %" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
+              <div className="h-40 flex items-center justify-center text-slate-400 text-xs">
                 No data available yet
               </div>
             )}
           </div>
 
           {/* Status Breakdown */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-            <h3 className="text-base font-semibold text-slate-800 mb-4">Task Status Breakdown</h3>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+            <h3 className="text-sm font-semibold text-slate-800 mb-2">Task Status Breakdown</h3>
             {statusData.length > 0 ? (
-              <div className="h-64">
+              <div className="h-40">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={3} dataKey="value">
+                    <Pie data={statusData} cx="50%" cy="50%" innerRadius={35} outerRadius={60} paddingAngle={2} dataKey="value">
                       {statusData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                    <Tooltip contentStyle={{ fontSize: '11px' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="h-64 flex items-center justify-center text-slate-400 text-sm">
+              <div className="h-40 flex items-center justify-center text-slate-400 text-xs">
                 No tasks yet
               </div>
             )}
@@ -337,58 +343,81 @@ export default function PublicDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {instances.filter(task => {
-                    if (!statusFilter || statusFilter === 'TOTAL') return true;
-                    if (statusFilter === 'PENDING') {
-                      return task.status === 'PENDING' || task.status === 'IN_PROGRESS' || task.status === 'SUBMITTED';
-                    }
-                    return task.status === statusFilter;
-                  }).map((task) => {
-                    const statusConfig = getStatusConfig(task.status);
-                    const StatusIcon = statusConfig.icon;
+                  {(() => {
+                    const filteredTasks = instances.filter(task => {
+                      if (!statusFilter || statusFilter === 'TOTAL') return true;
+                      if (statusFilter === 'PENDING') {
+                        return task.status === 'PENDING' || task.status === 'IN_PROGRESS' || task.status === 'SUBMITTED';
+                      }
+                      return task.status === statusFilter;
+                    });
+                    
+                    const displayedTasks = filteredTasks.slice(0, displayCount);
+                    const hasMore = filteredTasks.length > displayCount;
+                    
                     return (
-                      <tr key={task.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="text-sm font-medium text-slate-800">{task.template?.title}</p>
-                            <p className="text-xs text-slate-500 mt-0.5">{task.template?.category}</p>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center">
-                              <span className="text-xs font-bold text-blue-700">
-                                {task.assignee?.name?.charAt(0) || '?'}
-                              </span>
-                            </div>
-                            <span className="text-sm text-slate-700">{task.assignee?.name || 'Unassigned'}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm text-slate-600">{task.assignee?.department || '-'}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm text-slate-600 flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {task.dueDate}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-full ${statusConfig.color}`}>
-                            <StatusIcon className="w-3 h-3" />
-                            {task.status.replace('_', ' ')}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {task.template?.resourceLink ? (
-                            <span className="text-xs text-blue-600">📁 Available</span>
-                          ) : (
-                            <span className="text-xs text-slate-400">-</span>
-                          )}
-                        </td>
-                      </tr>
+                      <>
+                        {displayedTasks.map((task) => {
+                          const statusConfig = getStatusConfig(task.status);
+                          const StatusIcon = statusConfig.icon;
+                          return (
+                            <tr key={task.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="px-4 py-3">
+                                <div>
+                                  <p className="text-sm font-medium text-slate-800">{task.template?.title}</p>
+                                  <p className="text-xs text-slate-500 mt-0.5">{task.template?.category}</p>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <span className="text-xs font-bold text-blue-700">
+                                      {task.assignee?.name?.charAt(0) || '?'}
+                                    </span>
+                                  </div>
+                                  <span className="text-sm text-slate-700">{task.assignee?.name || 'Unassigned'}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="text-sm text-slate-600">{task.assignee?.department || '-'}</span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="text-sm text-slate-600 flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {task.dueDate}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-full ${statusConfig.color}`}>
+                                  <StatusIcon className="w-3 h-3" />
+                                  {task.status.replace('_', ' ')}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                {task.template?.resourceLink ? (
+                                  <span className="text-xs text-blue-600">📁 Available</span>
+                                ) : (
+                                  <span className="text-xs text-slate-400">-</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {hasMore && (
+                          <tr>
+                            <td colSpan={6} className="px-4 py-4 text-center">
+                              <button
+                                onClick={handleShowMore}
+                                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                              >
+                                Show More ({filteredTasks.length - displayCount} remaining)
+                              </button>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     );
-                  })}
+                  })()}
                 </tbody>
               </table>
             </div>
