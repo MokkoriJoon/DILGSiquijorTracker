@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import NotificationCenter from './NotificationCenter';
+import { NotificationBell } from './NotificationBell';
 import ToastContainer from './ToastContainer';
 import {
   LayoutDashboard,
@@ -166,7 +166,7 @@ export default function Layout({ children }: LayoutProps) {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <NotificationCenter />
+            <NotificationBell />
             <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500 ml-2">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               <span>Connected</span>

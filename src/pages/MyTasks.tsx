@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DatabaseService } from '../services/database';
+import { NotificationService } from '../services/notification';
 import type { TaskInstance } from '../types';
 import { CheckCircle2, Clock, AlertTriangle, Calendar, Tag, Upload, Send, ExternalLink } from 'lucide-react';
 
@@ -49,10 +50,19 @@ export default function MyTasks() {
   }
 
   async function confirmCompleteTask() {
-    if (!taskToComplete) return;
+    if (!taskToComplete || !user) return;
     
     const success = await DatabaseService.updateInstanceStatus(taskToComplete.id, 'COMPLETED');
     if (success) {
+      // Send notification about task completion
+      await NotificationService.notifyTaskCompletion(
+        taskToComplete.id,
+        taskToComplete.template?.title || 'Task',
+        taskToComplete.assignedTo,
+        user.id,
+        user.name
+      );
+      
       await loadTasks();
       setShowCompleteModal(false);
       setTaskToComplete(null);

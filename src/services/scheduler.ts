@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { TaskTemplate, DayOfWeek } from '../types';
+import { NotificationService } from './notification';
 
 /**
  * Scheduler Service - Handles automatic task instance generation
@@ -56,6 +57,14 @@ export const SchedulerService = {
               errors.push(`Failed to insert instances for template ${template.id}: ${insertError.message}`);
             } else {
               generated += instances.length;
+              
+              // Generate recurrence notifications for assigned users
+              const assignedUserIds = [...new Set(instances.map(i => i.assigned_to))];
+              await NotificationService.notifyRecurrenceGenerated(
+                template.id,
+                template.title,
+                assignedUserIds
+              );
             }
           }
         } catch (err) {
@@ -65,6 +74,13 @@ export const SchedulerService = {
 
       // Mark overdue tasks
       await this.markOverdueTasks();
+
+      // Generate reminder notifications
+      const reminderResult = await NotificationService.generateReminders();
+      if (reminderResult.errors.length > 0) {
+        errors.push(...reminderResult.errors);
+      }
+      generated += reminderResult.created;
 
     } catch (err) {
       errors.push(`Scheduler error: ${err instanceof Error ? err.message : 'Unknown error'}`);
