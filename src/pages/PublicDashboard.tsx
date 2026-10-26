@@ -3,22 +3,18 @@ import { Link } from 'react-router-dom';
 import { DatabaseService } from '../services/database';
 import type { TaskInstance } from '../types';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
-} from 'recharts';
-import {
   Building2, Shield, Users, CheckCircle2, Clock, AlertTriangle,
-  ClipboardList, TrendingUp, Calendar, Eye
+  ClipboardList, Calendar, Eye, X
 } from 'lucide-react';
 import { formatName } from '../utils/format';
 
 export default function PublicDashboard() {
   const [stats, setStats] = useState({
-    total: 0, completed: 0, pending: 0, overdue: 0, completionRate: 0
+    total: 0, completed: 0, pending: 0, overdue: 0
   });
   const [instances, setInstances] = useState<TaskInstance[]>([]);
   const [loading, setLoading] = useState(true);
-
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -26,10 +22,8 @@ export default function PublicDashboard() {
 
   async function loadData() {
     setLoading(true);
-    // Public dashboard should NOT include invisible tasks
     const instancesData = await DatabaseService.getInstances({ includeInvisible: false });
     
-    // Calculate stats with merged categories
     const total = instancesData.length;
     const completed = instancesData.filter(i => i.status === 'COMPLETED').length;
     const pending = instancesData.filter(i => 
@@ -38,14 +32,31 @@ export default function PublicDashboard() {
       i.status === 'SUBMITTED'
     ).length;
     const overdue = instancesData.filter(i => i.status === 'OVERDUE').length;
-    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
     
-    setStats({ total, completed, pending, overdue, completionRate });
+    setStats({ total, completed, pending, overdue });
     setInstances(instancesData);
     setLoading(false);
   }
 
+  const handleStatClick = (status: string) => {
+    setStatusFilter(status === statusFilter ? null : status);
+  };
 
+  const getFilteredTasks = () => {
+    if (!statusFilter || statusFilter === 'TOTAL') {
+      return instances;
+    }
+    
+    if (statusFilter === 'PENDING') {
+      return instances.filter(i => 
+        i.status === 'PENDING' || 
+        i.status === 'IN_PROGRESS' || 
+        i.status === 'SUBMITTED'
+      );
+    }
+    
+    return instances.filter(i => i.status === statusFilter);
+  };
 
   // Get upcoming tasks (due within next 7 days) grouped by recurrence
   const getUpcomingTasksByRecurrence = () => {
@@ -54,23 +65,25 @@ export default function PublicDashboard() {
     const sevenDaysFromNow = new Date(today);
     sevenDaysFromNow.setDate(today.getDate() + 7);
 
-    // Filter tasks due within next 7 days
     const upcomingTasks = instances.filter(task => {
       const dueDate = new Date(task.dueDate);
       dueDate.setHours(0, 0, 0, 0);
       return dueDate >= today && dueDate <= sevenDaysFromNow;
     });
 
-    // Deduplicate by template (show each task template only once)
-    const uniqueTemplates = new Map<string, TaskInstance>();
+    // Deduplicate by template
+    const uniqueTemplates = new Map<string, TaskInstance[]>();
     upcomingTasks.forEach(task => {
-      if (task.template && !uniqueTemplates.has(task.template.id)) {
-        uniqueTemplates.set(task.template.id, task);
+      if (task.template) {
+        if (!uniqueTemplates.has(task.template.id)) {
+          uniqueTemplates.set(task.template.id, []);
+        }
+        uniqueTemplates.get(task.template.id)!.push(task);
       }
     });
 
     // Group by recurrence type
-    const grouped: Record<string, TaskInstance[]> = {
+    const grouped: Record<string, Array<{ template: any; assignees: TaskInstance[] }>> = {
       'DAILY': [],
       'WEEKLY': [],
       'MONTHLY': [],
@@ -79,41 +92,28 @@ export default function PublicDashboard() {
       'ONCE': [],
     };
 
-    uniqueTemplates.forEach(task => {
-      const recurrence = task.template?.recurrence || 'ONCE';
+    uniqueTemplates.forEach((assignees) => {
+      const recurrence = assignees[0]?.template?.recurrence || 'ONCE';
       if (grouped[recurrence]) {
-        grouped[recurrence].push(task);
+        grouped[recurrence].push({
+          template: assignees[0].template,
+          assignees: assignees
+        });
       }
     });
 
     return grouped;
   };
 
-  // Build department chart data
-  const departmentData = () => {
-    const deptMap: Record<string, { total: number; completed: number }> = {};
-    instances.forEach((inst) => {
-      const dept = inst.assignee?.department || 'Unknown';
-      if (!deptMap[dept]) deptMap[dept] = { total: 0, completed: 0 };
-      deptMap[dept].total++;
-      if (inst.status === 'COMPLETED') deptMap[dept].completed++;
-    });
-    return Object.entries(deptMap).map(([name, data]) => ({
-      name: name.replace('Municipality of ', ''),
-      completionRate: data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0,
-      total: data.total,
-      completed: data.completed,
-    }));
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case 'COMPLETED': return { color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2 };
+      case 'IN_PROGRESS': return { color: 'bg-blue-100 text-blue-700', icon: Clock };
+      case 'SUBMITTED': return { color: 'bg-purple-100 text-purple-700', icon: Eye };
+      case 'OVERDUE': return { color: 'bg-red-100 text-red-700', icon: AlertTriangle };
+      default: return { color: 'bg-slate-100 text-slate-700', icon: Clock };
+    }
   };
-
-  // Status breakdown for pie chart
-  const statusData = [
-    { name: 'Completed', value: stats.completed, color: '#10b981' },
-    { name: 'Pending', value: stats.pending, color: '#f59e0b' },
-    { name: 'Overdue', value: stats.overdue, color: '#ef4444' },
-  ].filter(d => d.value > 0);
-
-
 
   if (loading) {
     return (
@@ -140,15 +140,21 @@ export default function PublicDashboard() {
                 </div>
               </div>
               <p className="text-blue-100 max-w-xl text-sm lg:text-base">
-                Public view of departmental programs and task progress across DILG Siquijor Provincial Office and all municipalities.
+                Real-time monitoring of departmental programs and upcoming tasks across DILG Siquijor Provincial Office.
               </p>
             </div>
             <div className="flex gap-3">
-              <Link to="/login" className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-white font-semibold rounded-lg transition-all shadow-lg">
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-white font-semibold rounded-lg transition-all shadow-lg"
+              >
                 <Shield className="w-4 h-4" />
                 Staff Login
               </Link>
-              <Link to="/register" className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium rounded-lg transition-all border border-white/20">
+              <Link
+                to="/register"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium rounded-lg transition-all border border-white/20"
+              >
                 <Users className="w-4 h-4" />
                 Register
               </Link>
@@ -169,46 +175,70 @@ export default function PublicDashboard() {
           </div>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Cards - Clickable */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <div 
+            onClick={() => handleStatClick('TOTAL')}
+            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === 'TOTAL' ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-100'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase">Total Tasks</p>
                 <p className="text-3xl font-bold text-slate-800 mt-1">{stats.total}</p>
+                <p className="text-xs text-blue-600 mt-1">Click to view all</p>
               </div>
               <div className="w-12 h-12 bg-blue-50 text-blue-700 rounded-xl flex items-center justify-center">
                 <ClipboardList className="w-6 h-6" />
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <div 
+            onClick={() => handleStatClick('COMPLETED')}
+            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === 'COMPLETED' ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-slate-100'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase">Completed</p>
                 <p className="text-3xl font-bold text-emerald-600 mt-1">{stats.completed}</p>
+                <p className="text-xs text-emerald-600 mt-1">Click to filter</p>
               </div>
               <div className="w-12 h-12 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <div 
+            onClick={() => handleStatClick('PENDING')}
+            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === 'PENDING' ? 'border-amber-500 ring-2 ring-amber-200' : 'border-slate-100'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase">Pending</p>
                 <p className="text-3xl font-bold text-amber-600 mt-1">{stats.pending}</p>
+                <p className="text-xs text-amber-600 mt-1">Click to filter</p>
               </div>
               <div className="w-12 h-12 bg-amber-50 text-amber-700 rounded-xl flex items-center justify-center">
                 <Clock className="w-6 h-6" />
               </div>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+          <div 
+            onClick={() => handleStatClick('OVERDUE')}
+            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === 'OVERDUE' ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-100'
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase">Overdue</p>
                 <p className="text-3xl font-bold text-red-600 mt-1">{stats.overdue}</p>
+                <p className="text-xs text-red-600 mt-1">Click to filter</p>
               </div>
               <div className="w-12 h-12 bg-red-50 text-red-700 rounded-xl flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6" />
@@ -217,81 +247,34 @@ export default function PublicDashboard() {
           </div>
         </div>
 
-
-
-        {/* Main Content: Completion Rate on top, then Charts on left, Tasks on right */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Completion Rate + Charts Column - Left Side */}
-          <div className="lg:col-span-1 space-y-4">
-            {/* Completion Rate Banner */}
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl p-4 text-white shadow-lg">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-emerald-100 text-xs">Overall Completion Rate</p>
-                  <p className="text-2xl font-bold">{stats.completionRate}%</p>
-                  <p className="text-emerald-100 text-xs mt-1">Target: 85%</p>
-                </div>
-              </div>
-              <div className="w-full bg-white/20 rounded-full h-2 mt-3">
-                <div className="bg-white rounded-full h-2" style={{ width: `${stats.completionRate}%` }} />
-              </div>
+        {/* Clear Filter Button */}
+        {statusFilter && (
+          <div className="mb-6 flex items-center justify-between bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-slate-700">
+                Showing: <span className="font-bold text-blue-600">{statusFilter}</span> tasks
+              </span>
+              <span className="text-xs text-slate-500">
+                ({getFilteredTasks().length} tasks)
+              </span>
             </div>
-
-            {/* Department Performance */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
-              <h3 className="text-sm font-semibold text-slate-800 mb-2">By Municipality</h3>
-              {departmentData().length > 0 ? (
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={departmentData()} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis type="number" tick={{ fontSize: 9 }} stroke="#94a3b8" domain={[0, 100]} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 8 }} stroke="#94a3b8" width={80} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '10px' }} />
-                      <Bar dataKey="completionRate" fill="#1e40af" radius={[0, 4, 4, 0]} name="Completion %" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="h-48 flex items-center justify-center text-slate-400 text-xs">
-                  No data available yet
-                </div>
-              )}
-            </div>
-
-            {/* Status Breakdown */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
-              <h3 className="text-sm font-semibold text-slate-800 mb-2">Status Breakdown</h3>
-              {statusData.length > 0 ? (
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={statusData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} dataKey="value">
-                        {statusData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ fontSize: '10px' }} />
-                      <Legend wrapperStyle={{ fontSize: '10px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="h-48 flex items-center justify-center text-slate-400 text-xs">
-                  No tasks yet
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => setStatusFilter(null)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-medium rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+              Clear Filter
+            </button>
           </div>
+        )}
 
-          {/* Upcoming Tasks Folder View - Right Side */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold text-slate-800">
+        {/* Main Content */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+          {!statusFilter ? (
+            // Folder View - Upcoming Tasks
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-slate-800">
                   📅 Upcoming Tasks (Next 7 Days)
                 </h3>
                 <span className="text-xs text-slate-500">
@@ -339,32 +322,57 @@ export default function PublicDashboard() {
                           </div>
                           
                           <div className="space-y-2">
-                            {tasks.slice(0, 10).map((task) => (
-                              <div key={task.id} className="bg-white rounded-lg p-3 border border-slate-200 hover:shadow-md transition-shadow">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold text-slate-800 truncate">
-                                      {task.template?.title}
-                                    </p>
-                                    <p className="text-xs text-slate-500 mt-0.5">
-                                      {task.template?.category}
-                                    </p>
-                                    <div className="flex items-center gap-3 mt-2 text-xs text-slate-600">
-                                      <span className="flex items-center gap-1">
-                                        <Calendar className="w-3 h-3" />
-                                        Due: {task.dueDate}
-                                        {task.template?.dueTime && (
-                                          <span className="text-blue-600 font-medium">at {task.template.dueTime}</span>
+                            {tasks.slice(0, 10).map((taskData) => {
+                              const { template, assignees } = taskData;
+                              const earliestDue = assignees.reduce((earliest, current) => 
+                                new Date(current.dueDate) < new Date(earliest.dueDate) ? current : earliest
+                              );
+                              
+                              return (
+                                <div key={template.id} className="bg-white rounded-lg p-3 border border-slate-200 hover:shadow-md transition-shadow">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-semibold text-slate-800 truncate">
+                                        {template.title}
+                                      </p>
+                                      <p className="text-xs text-slate-500 mt-0.5">
+                                        {template.category}
+                                      </p>
+                                      <div className="flex items-center gap-3 mt-2 text-xs text-slate-600">
+                                        <span className="flex items-center gap-1">
+                                          <Calendar className="w-3 h-3" />
+                                          Due: {earliestDue.dueDate}
+                                          {template.dueTime && (
+                                            <span className="text-blue-600 font-medium">at {template.dueTime}</span>
+                                          )}
+                                        </span>
+                                      </div>
+                                      {/* Assigned Users */}
+                                      <div className="mt-2 flex flex-wrap gap-1">
+                                        {assignees.slice(0, 5).map((assignee, idx) => (
+                                          <span 
+                                            key={idx}
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 text-xs rounded-full"
+                                          >
+                                            <div className="w-4 h-4 bg-blue-100 rounded-full flex items-center justify-center">
+                                              <span className="text-[8px] font-bold text-blue-700">
+                                                {assignee.assignee?.name ? formatName(assignee.assignee.name).charAt(0) : '?'}
+                                              </span>
+                                            </div>
+                                            {assignee.assignee?.name ? formatName(assignee.assignee.name) : 'Unassigned'}
+                                          </span>
+                                        ))}
+                                        {assignees.length > 5 && (
+                                          <span className="text-xs text-slate-500">
+                                            +{assignees.length - 5} more
+                                          </span>
                                         )}
-                                      </span>
-                                      {task.template?.resourceLink && (
-                                        <span className="text-blue-600">📁 Resource</span>
-                                      )}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                             {tasks.length > 10 && (
                               <p className="text-xs text-slate-500 text-center pt-2">
                                 + {tasks.length - 10} more {recurrence.toLowerCase()} tasks
@@ -377,14 +385,92 @@ export default function PublicDashboard() {
                   </div>
                 );
               })()}
-            </div>
-          </div>
+            </>
+          ) : (
+            // Filtered View - All Tasks
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-semibold text-slate-800">
+                  All Tasks ({getFilteredTasks().length})
+                </h3>
+              </div>
+              
+              {getFilteredTasks().length === 0 ? (
+                <div className="text-center py-12">
+                  <ClipboardList className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-sm text-slate-500">No tasks found</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-200">
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Task</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Assigned To</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Department</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Due Date</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {getFilteredTasks().map((task) => {
+                        const statusConfig = getStatusConfig(task.status);
+                        const StatusIcon = statusConfig.icon;
+                        return (
+                          <tr key={task.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <div>
+                                <p className="text-sm font-medium text-slate-800">{task.template?.title}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">{task.template?.category}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center">
+                                  <span className="text-xs font-bold text-blue-700">
+                                    {task.assignee?.name ? formatName(task.assignee.name).charAt(0) : '?'}
+                                  </span>
+                                </div>
+                                <span className="text-sm text-slate-700">{task.assignee?.name ? formatName(task.assignee.name) : 'Unassigned'}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-sm text-slate-600">{task.assignee?.department || '-'}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="text-sm text-slate-600">
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {task.dueDate}
+                                  {task.template?.dueTime && <span className="text-blue-600 font-medium">at {task.template.dueTime}</span>}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-full ${statusConfig.color}`}>
+                                <StatusIcon className="w-3 h-3" />
+                                {task.status.replace('_', ' ')}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Footer */}
         <footer className="mt-12 pt-8 border-t border-slate-200 text-center">
-          <p className="text-xs text-slate-500">© 2025 DILG Region NIR • Siquijor Provincial Office</p>
-          <p className="text-xs text-slate-400 mt-1">Republic of the Philippines</p>
+          <p className="text-xs text-slate-500">
+            © 2025 DILG Region NIR • Siquijor Provincial Office
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            Republic of the Philippines
+          </p>
         </footer>
       </div>
     </div>
