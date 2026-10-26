@@ -18,8 +18,7 @@ export default function PublicDashboard() {
   });
   const [instances, setInstances] = useState<TaskInstance[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [displayCount, setDisplayCount] = useState(10);
+
 
   useEffect(() => {
     loadData();
@@ -46,13 +45,48 @@ export default function PublicDashboard() {
     setLoading(false);
   }
 
-  const handleStatClick = (status: string) => {
-    setStatusFilter(status === statusFilter ? null : status);
-    setDisplayCount(10); // Reset pagination when filter changes
-  };
 
-  const handleShowMore = () => {
-    setDisplayCount(prev => prev + 10);
+
+  // Get upcoming tasks (due within next 7 days) grouped by recurrence
+  const getUpcomingTasksByRecurrence = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const sevenDaysFromNow = new Date(today);
+    sevenDaysFromNow.setDate(today.getDate() + 7);
+
+    // Filter tasks due within next 7 days
+    const upcomingTasks = instances.filter(task => {
+      const dueDate = new Date(task.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      return dueDate >= today && dueDate <= sevenDaysFromNow;
+    });
+
+    // Deduplicate by template (show each task template only once)
+    const uniqueTemplates = new Map<string, TaskInstance>();
+    upcomingTasks.forEach(task => {
+      if (task.template && !uniqueTemplates.has(task.template.id)) {
+        uniqueTemplates.set(task.template.id, task);
+      }
+    });
+
+    // Group by recurrence type
+    const grouped: Record<string, TaskInstance[]> = {
+      'DAILY': [],
+      'WEEKLY': [],
+      'MONTHLY': [],
+      'QUARTERLY': [],
+      'YEARLY': [],
+      'ONCE': [],
+    };
+
+    uniqueTemplates.forEach(task => {
+      const recurrence = task.template?.recurrence || 'ONCE';
+      if (grouped[recurrence]) {
+        grouped[recurrence].push(task);
+      }
+    });
+
+    return grouped;
   };
 
   // Build department chart data
@@ -79,15 +113,7 @@ export default function PublicDashboard() {
     { name: 'Overdue', value: stats.overdue, color: '#ef4444' },
   ].filter(d => d.value > 0);
 
-  const getStatusConfig = (status: string) => {
-    switch (status) {
-      case 'COMPLETED': return { color: 'bg-emerald-100 text-emerald-700', icon: CheckCircle2 };
-      case 'IN_PROGRESS': return { color: 'bg-blue-100 text-blue-700', icon: Clock };
-      case 'SUBMITTED': return { color: 'bg-purple-100 text-purple-700', icon: Eye };
-      case 'OVERDUE': return { color: 'bg-red-100 text-red-700', icon: AlertTriangle };
-      default: return { color: 'bg-slate-100 text-slate-700', icon: Clock };
-    }
-  };
+
 
   if (loading) {
     return (
@@ -143,70 +169,46 @@ export default function PublicDashboard() {
           </div>
         </div>
 
-        {/* Stats Cards - Clickable */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div 
-            onClick={() => handleStatClick('TOTAL')}
-            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
-              statusFilter === 'TOTAL' ? 'border-blue-500 ring-2 ring-blue-200' : 'border-slate-100'
-            }`}
-          >
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase">Total Tasks</p>
                 <p className="text-3xl font-bold text-slate-800 mt-1">{stats.total}</p>
-                <p className="text-xs text-blue-600 mt-1">Click to filter</p>
               </div>
               <div className="w-12 h-12 bg-blue-50 text-blue-700 rounded-xl flex items-center justify-center">
                 <ClipboardList className="w-6 h-6" />
               </div>
             </div>
           </div>
-          <div 
-            onClick={() => handleStatClick('COMPLETED')}
-            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
-              statusFilter === 'COMPLETED' ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-slate-100'
-            }`}
-          >
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase">Completed</p>
                 <p className="text-3xl font-bold text-emerald-600 mt-1">{stats.completed}</p>
-                <p className="text-xs text-emerald-600 mt-1">Click to filter</p>
               </div>
               <div className="w-12 h-12 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
             </div>
           </div>
-          <div 
-            onClick={() => handleStatClick('PENDING')}
-            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
-              statusFilter === 'PENDING' ? 'border-amber-500 ring-2 ring-amber-200' : 'border-slate-100'
-            }`}
-          >
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase">Pending</p>
                 <p className="text-3xl font-bold text-amber-600 mt-1">{stats.pending}</p>
-                <p className="text-xs text-amber-600 mt-1">Click to filter</p>
               </div>
               <div className="w-12 h-12 bg-amber-50 text-amber-700 rounded-xl flex items-center justify-center">
                 <Clock className="w-6 h-6" />
               </div>
             </div>
           </div>
-          <div 
-            onClick={() => handleStatClick('OVERDUE')}
-            className={`bg-white rounded-xl shadow-sm border-2 p-5 cursor-pointer transition-all hover:shadow-md ${
-              statusFilter === 'OVERDUE' ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-100'
-            }`}
-          >
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase">Overdue</p>
                 <p className="text-3xl font-bold text-red-600 mt-1">{stats.overdue}</p>
-                <p className="text-xs text-red-600 mt-1">Click to filter</p>
               </div>
               <div className="w-12 h-12 bg-red-50 text-red-700 rounded-xl flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6" />
@@ -285,124 +287,96 @@ export default function PublicDashboard() {
             </div>
           </div>
 
-          {/* Tasks Table Column - Right Side */}
+          {/* Upcoming Tasks Folder View - Right Side */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold text-slate-800">
-              All Tasks (Read-Only View)
-            </h3>
-            <span className="text-xs text-slate-500">
-              {instances.length} total tasks
-            </span>
-          </div>
-          
-          {instances.length === 0 ? (
-            <div className="text-center py-12">
-              <ClipboardList className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm text-slate-500">No tasks have been created yet</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Task</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Assigned To</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Department</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Due Date</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Status</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Resource</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {(() => {
-                    const filteredTasks = instances.filter(task => {
-                      if (!statusFilter || statusFilter === 'TOTAL') return true;
-                      if (statusFilter === 'PENDING') {
-                        return task.status === 'PENDING' || task.status === 'IN_PROGRESS' || task.status === 'SUBMITTED';
-                      }
-                      return task.status === statusFilter;
-                    });
-                    
-                    const displayedTasks = filteredTasks.slice(0, displayCount);
-                    const hasMore = filteredTasks.length > displayCount;
-                    
-                    return (
-                      <>
-                        {displayedTasks.map((task) => {
-                          const statusConfig = getStatusConfig(task.status);
-                          const StatusIcon = statusConfig.icon;
-                          return (
-                            <tr key={task.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="px-4 py-3">
-                                <div>
-                                  <p className="text-sm font-medium text-slate-800">{task.template?.title}</p>
-                                  <p className="text-xs text-slate-500 mt-0.5">{task.template?.category}</p>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center">
-                                    <span className="text-xs font-bold text-blue-700">
-                                      {task.assignee?.name ? formatName(task.assignee.name).charAt(0) : '?'}
-                                    </span>
-                                  </div>
-                                  <span className="text-sm text-slate-700">{task.assignee?.name ? formatName(task.assignee.name) : 'Unassigned'}</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className="text-sm text-slate-600">{task.assignee?.department || '-'}</span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="text-sm text-slate-600">
-                                  <div className="flex items-center gap-1">
-                                    <Calendar className="w-3 h-3" />
-                                    {task.dueDate}
-                                    {task.template?.dueTime && <span className="text-blue-600 font-medium">at {task.template.dueTime}</span>}
-                                  </div>
-                                  {task.template?.startDate && task.template?.recurrence === 'DAILY' && (
-                                    <div className="text-xs text-purple-600 mt-0.5">
-                                      Starts: {task.template.startDate}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-semibold text-slate-800">
+                  📅 Upcoming Tasks (Next 7 Days)
+                </h3>
+                <span className="text-xs text-slate-500">
+                  Reminder view - tasks due soon
+                </span>
+              </div>
+              
+              {(() => {
+                const groupedTasks = getUpcomingTasksByRecurrence();
+                const hasAnyTasks = Object.values(groupedTasks).some(tasks => tasks.length > 0);
+                
+                if (!hasAnyTasks) {
+                  return (
+                    <div className="text-center py-12">
+                      <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-sm text-slate-500">No upcoming tasks in the next 7 days</p>
+                    </div>
+                  );
+                }
+
+                const recurrenceConfig = {
+                  'DAILY': { icon: '🔄', color: 'bg-blue-50 border-blue-200', label: 'Daily Tasks' },
+                  'WEEKLY': { icon: '📅', color: 'bg-purple-50 border-purple-200', label: 'Weekly Tasks' },
+                  'MONTHLY': { icon: '🗓️', color: 'bg-green-50 border-green-200', label: 'Monthly Tasks' },
+                  'QUARTERLY': { icon: '📊', color: 'bg-orange-50 border-orange-200', label: 'Quarterly Tasks' },
+                  'YEARLY': { icon: '🎯', color: 'bg-red-50 border-red-200', label: 'Yearly Tasks' },
+                  'ONCE': { icon: '📌', color: 'bg-slate-50 border-slate-200', label: 'One-time Tasks' },
+                };
+
+                return (
+                  <div className="space-y-4">
+                    {Object.entries(groupedTasks).map(([recurrence, tasks]) => {
+                      if (tasks.length === 0) return null;
+                      
+                      const config = recurrenceConfig[recurrence as keyof typeof recurrenceConfig];
+                      
+                      return (
+                        <div key={recurrence} className={`border-2 rounded-lg p-4 ${config.color}`}>
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-2xl">{config.icon}</span>
+                            <h4 className="text-sm font-bold text-slate-800">{config.label}</h4>
+                            <span className="text-xs bg-white px-2 py-0.5 rounded-full font-semibold text-slate-600">
+                              {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            {tasks.slice(0, 10).map((task) => (
+                              <div key={task.id} className="bg-white rounded-lg p-3 border border-slate-200 hover:shadow-md transition-shadow">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-slate-800 truncate">
+                                      {task.template?.title}
+                                    </p>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                      {task.template?.category}
+                                    </p>
+                                    <div className="flex items-center gap-3 mt-2 text-xs text-slate-600">
+                                      <span className="flex items-center gap-1">
+                                        <Calendar className="w-3 h-3" />
+                                        Due: {task.dueDate}
+                                        {task.template?.dueTime && (
+                                          <span className="text-blue-600 font-medium">at {task.template.dueTime}</span>
+                                        )}
+                                      </span>
+                                      {task.template?.resourceLink && (
+                                        <span className="text-blue-600">📁 Resource</span>
+                                      )}
                                     </div>
-                                  )}
+                                  </div>
                                 </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-full ${statusConfig.color}`}>
-                                  <StatusIcon className="w-3 h-3" />
-                                  {task.status.replace('_', ' ')}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3">
-                                {task.template?.resourceLink ? (
-                                  <span className="text-xs text-blue-600">📁 Available</span>
-                                ) : (
-                                  <span className="text-xs text-slate-400">-</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {hasMore && (
-                          <tr>
-                            <td colSpan={6} className="px-4 py-4 text-center">
-                              <button
-                                onClick={handleShowMore}
-                                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                              >
-                                Show More ({filteredTasks.length - displayCount} remaining)
-                              </button>
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    );
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          )}
+                              </div>
+                            ))}
+                            {tasks.length > 10 && (
+                              <p className="text-xs text-slate-500 text-center pt-2">
+                                + {tasks.length - 10} more {recurrence.toLowerCase()} tasks
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
