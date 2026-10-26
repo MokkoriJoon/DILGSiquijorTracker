@@ -26,6 +26,7 @@ export interface TaskTemplate {
   category: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   resourceLink?: string;
+  visible: boolean; // If false, only visible to assigned users
   createdBy: string;
   createdAt: string;
 }

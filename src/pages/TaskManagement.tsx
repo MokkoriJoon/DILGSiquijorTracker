@@ -212,6 +212,7 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [visible, setVisible] = useState(true); // Toggle for private tasks
 
   // Role-based permissions
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
@@ -265,6 +266,7 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
         category,
         priority,
         resourceLink: resourceLink || undefined,
+        visible,
         createdBy: currentUser?.id || '',
       });
 
@@ -472,6 +474,25 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
             <p className="text-xs text-slate-500 mt-1">
               Optional: Link to shared folder where task outputs are stored
             </p>
+          </div>
+
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={visible}
+                onChange={(e) => setVisible(e.target.checked)}
+                className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-slate-700">Visible</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {visible 
+                    ? 'Task is visible to everyone and counts in total statistics' 
+                    : 'Task is private - only visible to assigned users and not counted in statistics'}
+                </p>
+              </div>
+            </label>
           </div>
 
           <div>
