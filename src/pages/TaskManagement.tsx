@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseService } from '../services/database';
+import { NotificationService } from '../services/notification';
 import { useAuth } from '../context/AuthContext';
 import type { TaskTemplate, RecurrenceType } from '../types';
 import { Plus, Search, Repeat, Tag, Users, Clock, Trash2, ExternalLink, X, Edit2 } from 'lucide-react';
@@ -334,6 +335,14 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
 
         if (!instanceResult) {
           console.warn('[CreateTask] Failed to create instance for user:', userId);
+        } else {
+          // Send notification to assigned user
+          await NotificationService.notifyTaskAssignment(
+            instanceResult.id,
+            template.title,
+            userId,
+            initialDueDate
+          );
         }
       }
 
