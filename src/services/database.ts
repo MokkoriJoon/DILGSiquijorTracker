@@ -48,6 +48,7 @@ function mapTemplate(row: any): TaskTemplate {
     dueDay: row.due_day,
     dueDaysOfWeek: row.due_days_of_week || [],
     dueTime: row.due_time,
+    startDate: row.start_date,
     category: row.category,
     priority: row.priority,
     resourceLink: row.resource_link,
@@ -112,6 +113,9 @@ export const DatabaseService = {
       }
       if (template.dueTime) {
         insertData.due_time = template.dueTime;
+      }
+      if (template.startDate) {
+        insertData.start_date = template.startDate;
       }
     }
 
@@ -186,6 +190,9 @@ export const DatabaseService = {
     }
     if (updates.dueTime !== undefined) {
       updateData.due_time = updates.dueTime;
+    }
+    if (updates.startDate !== undefined) {
+      updateData.start_date = updates.startDate;
     }
 
     const { data, error } = await supabase

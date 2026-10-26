@@ -23,6 +23,7 @@ export interface TaskTemplate {
   dueDay?: number;
   dueDaysOfWeek?: DayOfWeek[]; // For DAILY recurrence: which days of the week
   dueTime?: string; // For DAILY recurrence: time of day (HH:MM format)
+  startDate?: string; // For DAILY recurrence: when the recurrence starts (YYYY-MM-DD format)
   category: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   resourceLink?: string;

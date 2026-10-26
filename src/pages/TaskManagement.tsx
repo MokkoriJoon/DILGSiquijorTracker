@@ -217,6 +217,7 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
   // Daily recurrence fields
   const [dueDaysOfWeek, setDueDaysOfWeek] = useState<string[]>([]);
   const [dueTime, setDueTime] = useState('17:00'); // Default 5:00 PM
+  const [startDate, setStartDate] = useState(''); // Start date for daily recurrence
 
   // Role-based permissions
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
@@ -259,6 +260,14 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
       setError('Please select at least one day for daily recurrence');
       return;
     }
+    if (recurrence === 'DAILY' && !startDate) {
+      setError('Start date is required for daily recurrence');
+      return;
+    }
+    if (recurrence === 'DAILY' && !startDate) {
+      setError('Start date is required for daily recurrence');
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -273,6 +282,7 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
         dueDay: recurrence !== 'ONCE' && recurrence !== 'DAILY' ? dueDay : undefined,
         dueDaysOfWeek: recurrence === 'DAILY' ? dueDaysOfWeek as any : undefined,
         dueTime: recurrence === 'DAILY' ? dueTime : undefined,
+        startDate: recurrence === 'DAILY' ? startDate : undefined,
         category,
         priority,
         resourceLink: resourceLink || undefined,
@@ -540,6 +550,21 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
           {/* Daily Recurrence - Day Selection */}
           {recurrence === 'DAILY' && (
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Start Date *
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  min={new Date().toISOString().split('T')[0]}
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  When should this daily recurrence start?
+                </p>
+              </div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Recur on which days? *
               </label>
@@ -789,6 +814,7 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
   const [dueDay, setDueDay] = useState(task.dueDay || 25);
   const [dueDaysOfWeek, setDueDaysOfWeek] = useState<string[]>(task.dueDaysOfWeek || []);
   const [dueTime, setDueTime] = useState(task.dueTime || '17:00');
+  const [startDate, setStartDate] = useState(task.startDate || '');
   const [resourceLink, setResourceLink] = useState(task.resourceLink || '');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -847,6 +873,7 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
         dueDay: recurrence !== 'ONCE' && recurrence !== 'DAILY' ? dueDay : undefined,
         dueDaysOfWeek: recurrence === 'DAILY' ? dueDaysOfWeek as any : undefined,
         dueTime: recurrence === 'DAILY' ? dueTime : undefined,
+        startDate: recurrence === 'DAILY' ? startDate : undefined,
         category,
         priority,
         resourceLink: resourceLink || undefined,
@@ -998,6 +1025,21 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
           {/* Daily Recurrence - Day Selection */}
           {recurrence === 'DAILY' && (
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Start Date *
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                  min={new Date().toISOString().split('T')[0]}
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  When should this daily recurrence start?
+                </p>
+              </div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
                 Recur on which days? *
               </label>

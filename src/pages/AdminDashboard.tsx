@@ -365,6 +365,13 @@ export default function AdminDashboard() {
                           </span>
                           <span className="text-[10px] text-slate-400">{task.template?.category}</span>
                         </div>
+                        {task.template?.startDate && task.template?.recurrence === 'DAILY' && (
+                          <div className="mt-1">
+                            <span className="text-[9px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+                              Starts: {task.template.startDate}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ))}
                     {tasks.length === 0 && (
