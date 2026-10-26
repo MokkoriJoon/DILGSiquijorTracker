@@ -56,6 +56,21 @@ export function NotificationBell() {
     }
   }
 
+  async function handleDeleteAll() {
+    if (!user) return;
+    
+    if (!confirm('Are you sure you want to delete all notifications? This cannot be undone.')) {
+      return;
+    }
+    
+    setLoading(true);
+    const result = await NotificationService.deleteAllNotifications(user.id);
+    if (result.success) {
+      await loadNotifications();
+    }
+    setLoading(false);
+  }
+
   function getNotificationIcon(type: NotificationType) {
     switch (type) {
       case 'reminder_3days':
@@ -141,15 +156,27 @@ export function NotificationBell() {
             <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-slate-900">Notifications</h3>
-                {unreadCount > 0 && (
-                  <button
-                    onClick={handleMarkAllAsRead}
-                    disabled={loading}
-                    className="text-xs text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
-                  >
-                    {loading ? 'Marking...' : 'Mark all as read'}
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllAsRead}
+                      disabled={loading}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium disabled:opacity-50"
+                    >
+                      {loading ? 'Marking...' : 'Mark all as read'}
+                    </button>
+                  )}
+                  {notifications.length > 0 && (
+                    <button
+                      onClick={handleDeleteAll}
+                      disabled={loading}
+                      className="text-xs text-red-600 hover:text-red-700 font-medium disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Delete all
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
