@@ -11,6 +11,7 @@ import TaskManagement from './pages/TaskManagement';
 import UserManagement from './pages/UserManagement';
 import MyTasks from './pages/MyTasks';
 import SchedulerPage from './pages/SchedulerPage';
+import SchedulerDebug from './pages/SchedulerDebug';
 import Profile from './pages/Profile';
 import TaskCategories from './pages/TaskCategories';
 import ResourceLinks from './pages/ResourceLinks';
@@ -78,6 +79,11 @@ function AppRoutes() {
       <Route path="/scheduler" element={
         <ProtectedRoute allowedRoles={['SUPER_ADMIN', 'ADMIN']}>
           <SchedulerPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/scheduler-debug" element={
+        <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+          <SchedulerDebug />
         </ProtectedRoute>
       } />
       <Route path="/my-tasks" element={
