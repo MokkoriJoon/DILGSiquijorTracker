@@ -179,6 +179,14 @@ export const DatabaseService = {
     if (updates.category !== undefined) updateData.category = updates.category;
     if (updates.priority !== undefined) updateData.priority = updates.priority;
     if (updates.resourceLink !== undefined) updateData.resource_link = updates.resourceLink || null;
+    
+    // Add daily recurrence fields if provided
+    if (updates.dueDaysOfWeek !== undefined) {
+      updateData.due_days_of_week = updates.dueDaysOfWeek;
+    }
+    if (updates.dueTime !== undefined) {
+      updateData.due_time = updates.dueTime;
+    }
 
     const { data, error } = await supabase
       .from('task_templates')

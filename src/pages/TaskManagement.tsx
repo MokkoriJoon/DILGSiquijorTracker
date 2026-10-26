@@ -787,6 +787,8 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
   const [priority, setPriority] = useState(task.priority);
   const [recurrence, setRecurrence] = useState(task.recurrence);
   const [dueDay, setDueDay] = useState(task.dueDay || 25);
+  const [dueDaysOfWeek, setDueDaysOfWeek] = useState<string[]>(task.dueDaysOfWeek || []);
+  const [dueTime, setDueTime] = useState(task.dueTime || '17:00');
   const [resourceLink, setResourceLink] = useState(task.resourceLink || '');
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -828,6 +830,11 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
       return;
     }
 
+    if (recurrence === 'DAILY' && dueDaysOfWeek.length === 0) {
+      setError('Please select at least one day for daily recurrence');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -837,7 +844,9 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
         title,
         description,
         recurrence,
-        dueDay: recurrence !== 'ONCE' ? dueDay : undefined,
+        dueDay: recurrence !== 'ONCE' && recurrence !== 'DAILY' ? dueDay : undefined,
+        dueDaysOfWeek: recurrence === 'DAILY' ? dueDaysOfWeek as any : undefined,
+        dueTime: recurrence === 'DAILY' ? dueTime : undefined,
         category,
         priority,
         resourceLink: resourceLink || undefined,
@@ -949,7 +958,28 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
                 <option value="YEARLY">Yearly</option>
               </select>
             </div>
-            {recurrence !== 'ONCE' && (
+            {recurrence === 'ONCE' ? (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Due Date *</label>
+                <input
+                  type="date"
+                  value={dueDay.toString()}
+                  onChange={(e) => setDueDay(parseInt(e.target.value) || 25)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            ) : recurrence === 'DAILY' ? (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Due Time</label>
+                <input
+                  type="time"
+                  value={dueTime}
+                  onChange={(e) => setDueTime(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Time when task is due (24-hour format)</p>
+              </div>
+            ) : (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Due Day of Month</label>
                 <input
@@ -964,6 +994,148 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
               </div>
             )}
           </div>
+
+          {/* Daily Recurrence - Day Selection */}
+          {recurrence === 'DAILY' && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Recur on which days? *
+              </label>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('MONDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'MONDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'MONDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Monday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('TUESDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'TUESDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'TUESDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Tuesday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('WEDNESDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'WEDNESDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'WEDNESDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Wednesday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('THURSDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'THURSDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'THURSDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Thursday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('FRIDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'FRIDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'FRIDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Friday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('SATURDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'SATURDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'SATURDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Saturday</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dueDaysOfWeek.includes('SUNDAY')}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setDueDaysOfWeek([...dueDaysOfWeek, 'SUNDAY']);
+                      } else {
+                        setDueDaysOfWeek(dueDaysOfWeek.filter(d => d !== 'SUNDAY'));
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm text-slate-700">Sunday</span>
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDueDaysOfWeek(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'])}
+                  className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Monday-Friday
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDueDaysOfWeek(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'])}
+                  className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Whole Week
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDueDaysOfWeek([])}
+                  className="px-3 py-1 text-xs bg-slate-200 text-slate-700 rounded hover:bg-slate-300"
+                >
+                  Clear
+                </button>
+              </div>
+              <p className="text-xs text-blue-700 mt-2">
+                Select which days of the week this task should recur
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
