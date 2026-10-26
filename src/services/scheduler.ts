@@ -268,10 +268,24 @@ export const SchedulerService = {
 
     // Filter tasks that are actually overdue
     const overdueTasks = tasksToCheck.filter(task => {
+      // Normalize time formats for comparison
+      const normalizeTime = (time: string | null) => {
+        if (!time) return null;
+        // Handle various formats: "HH:MM", "HH:MM:SS", "HH:MM:SS.sss"
+        const parts = time.split(':');
+        if (parts.length >= 2) {
+          return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+        }
+        return time;
+      };
+
+      const taskDueTime = normalizeTime(task.due_time);
+      
       console.log('[Scheduler] Checking task:', {
         id: task.id,
         due_date: task.due_date,
         due_time: task.due_time,
+        normalized_due_time: taskDueTime,
         status: task.status,
         today: today,
         currentTime: currentTime,
@@ -279,24 +293,33 @@ export const SchedulerService = {
       
       // If due date is before today, it's overdue
       if (task.due_date < today) {
-        console.log('[Scheduler] Task is overdue (past date):', task.id);
+        console.log('[Scheduler] ✅ Task is overdue (past date):', task.id);
         return true;
       }
       
       // If due date is today and there's a due time, check if time has passed
-      if (task.due_date === today && task.due_time) {
-        const isOverdue = task.due_time < currentTime;
+      if (task.due_date === today && taskDueTime) {
+        const isOverdue = taskDueTime < currentTime;
         console.log('[Scheduler] Task due today, time check:', {
           taskId: task.id,
           due_time: task.due_time,
+          normalized_due_time: taskDueTime,
           currentTime: currentTime,
           isOverdue: isOverdue,
+          comparison: `${taskDueTime} < ${currentTime} = ${isOverdue}`,
         });
+        
+        if (isOverdue) {
+          console.log('[Scheduler] ✅ Task is overdue (time passed):', task.id);
+        } else {
+          console.log('[Scheduler] ⏳ Task not overdue yet (time not passed):', task.id);
+        }
+        
         return isOverdue;
       }
       
       // If due date is today but no time specified, don't mark as overdue yet
-      console.log('[Scheduler] Task not overdue yet:', task.id);
+      console.log('[Scheduler] ⏳ Task not overdue yet (no time specified):', task.id);
       return false;
     });
 
