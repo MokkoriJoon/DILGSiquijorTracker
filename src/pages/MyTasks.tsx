@@ -151,6 +151,12 @@ export default function MyTasks() {
                       Due: {task.dueDate}
                       {task.template?.dueTime && <span className="ml-1 text-blue-600 font-medium">at {task.template.dueTime}</span>}
                     </span>
+                    {task.template?.startDate && task.template?.recurrence === 'DAILY' && (
+                      <span className="inline-flex items-center gap-1 text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
+                        <Clock className="w-3 h-3" />
+                        Starts: {task.template.startDate}
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1 text-xs text-slate-500">
                       <Tag className="w-3 h-3" />
                       {task.template?.category}

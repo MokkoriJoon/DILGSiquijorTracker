@@ -355,11 +355,18 @@ export default function PublicDashboard() {
                                 <span className="text-sm text-slate-600">{task.assignee?.department || '-'}</span>
                               </td>
                               <td className="px-4 py-3">
-                                <span className="text-sm text-slate-600 flex items-center gap-1">
-                                  <Calendar className="w-3 h-3" />
-                                  {task.dueDate}
-                                  {task.template?.dueTime && <span className="text-blue-600 font-medium">at {task.template.dueTime}</span>}
-                                </span>
+                                <div className="text-sm text-slate-600">
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {task.dueDate}
+                                    {task.template?.dueTime && <span className="text-blue-600 font-medium">at {task.template.dueTime}</span>}
+                                  </div>
+                                  {task.template?.startDate && task.template?.recurrence === 'DAILY' && (
+                                    <div className="text-xs text-purple-600 mt-0.5">
+                                      Starts: {task.template.startDate}
+                                    </div>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-4 py-3">
                                 <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded-full ${statusConfig.color}`}>
