@@ -285,6 +285,7 @@ export const DatabaseService = {
           template_id: templateId,
           assigned_to: userId,
           due_date: dueDate,
+          due_time: template.due_time || null,
           status: 'PENDING',
         }));
 
@@ -374,6 +375,7 @@ export const DatabaseService = {
     templateId: string;
     assignedTo: string;
     dueDate: string;
+    dueTime?: string;
     status?: TaskStatus;
   }): Promise<TaskInstance | null> {
     // Fetch template and assignee first
@@ -393,6 +395,7 @@ export const DatabaseService = {
         template_id: instance.templateId,
         assigned_to: instance.assignedTo,
         due_date: instance.dueDate,
+        due_time: instance.dueTime || null,
         status: instance.status || 'PENDING',
       })
       .select(`
