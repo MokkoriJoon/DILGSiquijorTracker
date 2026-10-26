@@ -268,17 +268,35 @@ export const SchedulerService = {
 
     // Filter tasks that are actually overdue
     const overdueTasks = tasksToCheck.filter(task => {
+      console.log('[Scheduler] Checking task:', {
+        id: task.id,
+        due_date: task.due_date,
+        due_time: task.due_time,
+        status: task.status,
+        today: today,
+        currentTime: currentTime,
+      });
+      
       // If due date is before today, it's overdue
       if (task.due_date < today) {
+        console.log('[Scheduler] Task is overdue (past date):', task.id);
         return true;
       }
       
       // If due date is today and there's a due time, check if time has passed
       if (task.due_date === today && task.due_time) {
-        return task.due_time < currentTime;
+        const isOverdue = task.due_time < currentTime;
+        console.log('[Scheduler] Task due today, time check:', {
+          taskId: task.id,
+          due_time: task.due_time,
+          currentTime: currentTime,
+          isOverdue: isOverdue,
+        });
+        return isOverdue;
       }
       
       // If due date is today but no time specified, don't mark as overdue yet
+      console.log('[Scheduler] Task not overdue yet:', task.id);
       return false;
     });
 

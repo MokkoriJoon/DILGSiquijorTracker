@@ -48,6 +48,7 @@ export default function Layout({ children }: LayoutProps) {
         { path: '/tasks', label: 'Task Management', icon: ClipboardList },
         { path: '/users', label: 'User Management', icon: Users },
         { path: '/scheduler', label: 'Scheduler', icon: RefreshCw },
+        ...(isSuperAdmin ? [{ path: '/scheduler-debug', label: 'Scheduler Debug', icon: RefreshCw }] : []),
         { path: '/profile', label: 'My Profile', icon: Shield },
       ]
     : canManageTasks
