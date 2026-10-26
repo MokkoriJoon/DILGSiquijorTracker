@@ -81,8 +81,8 @@ export default function Layout({ children }: LayoutProps) {
             <Building2 className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-sm leading-tight">DILG Siquijor</h1>
-            <p className="text-[10px] text-blue-300 leading-tight">Region NIR</p>
+            <h1 className="font-bold text-sm leading-tight">D.E.N.N.I.S.</h1>
+            <p className="text-[10px] text-blue-300 leading-tight">Digital Ecosystem</p>
           </div>
           <button
             className="lg:hidden ml-auto text-blue-300 hover:text-white"

@@ -15,6 +15,7 @@ export default function PublicDashboard() {
   const [instances, setInstances] = useState<TaskInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [recurrenceFilter, setRecurrenceFilter] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -56,6 +57,25 @@ export default function PublicDashboard() {
     }
     
     return instances.filter(i => i.status === statusFilter);
+  };
+
+  // Get tasks filtered by recurrence type
+  const getTasksByRecurrence = (recurrenceType: string) => {
+    // Deduplicate by template
+    const uniqueTemplates = new Map<string, TaskInstance[]>();
+    instances.forEach(task => {
+      if (task.template && task.template.recurrence === recurrenceType) {
+        if (!uniqueTemplates.has(task.template.id)) {
+          uniqueTemplates.set(task.template.id, []);
+        }
+        uniqueTemplates.get(task.template.id)!.push(task);
+      }
+    });
+
+    return Array.from(uniqueTemplates.entries()).map(([templateId, assignees]) => ({
+      template: assignees[0].template,
+      assignees: assignees
+    }));
   };
 
   // Get upcoming tasks (due within next 7 days) grouped by recurrence
@@ -135,8 +155,8 @@ export default function PublicDashboard() {
                   <Building2 className="w-8 h-8 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl lg:text-3xl font-bold">DILG Siquijor</h1>
-                  <p className="text-blue-200 text-sm">Task Tracker • Region NIR</p>
+                  <h1 className="text-2xl lg:text-3xl font-bold">D.E.N.N.I.S.</h1>
+                  <p className="text-blue-200 text-sm">Digital Ecosystem for Navigation, Notifications, Information, and Schedules</p>
                 </div>
               </div>
               <p className="text-blue-100 max-w-xl text-sm lg:text-base">
@@ -266,16 +286,193 @@ export default function PublicDashboard() {
           {!statusFilter ? (
             // Folder View - Upcoming Tasks
             <>
+              {/* Recurrence Filter Buttons */}
+              <div className="mb-6">
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <button
+                    onClick={() => setRecurrenceFilter(null)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      recurrenceFilter === null
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    📅 All Upcoming
+                  </button>
+                  <button
+                    onClick={() => setRecurrenceFilter('DAILY')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      recurrenceFilter === 'DAILY'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    🔄 Daily
+                  </button>
+                  <button
+                    onClick={() => setRecurrenceFilter('WEEKLY')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      recurrenceFilter === 'WEEKLY'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    📅 Weekly
+                  </button>
+                  <button
+                    onClick={() => setRecurrenceFilter('MONTHLY')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      recurrenceFilter === 'MONTHLY'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    🗓️ Monthly
+                  </button>
+                  <button
+                    onClick={() => setRecurrenceFilter('QUARTERLY')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      recurrenceFilter === 'QUARTERLY'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    📊 Quarterly
+                  </button>
+                  <button
+                    onClick={() => setRecurrenceFilter('SEMESTER')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      recurrenceFilter === 'SEMESTER'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    📆 Semester
+                  </button>
+                  <button
+                    onClick={() => setRecurrenceFilter('YEARLY')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      recurrenceFilter === 'YEARLY'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    🎯 Yearly
+                  </button>
+                  <button
+                    onClick={() => setRecurrenceFilter('ONCE')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      recurrenceFilter === 'ONCE'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    📌 One-time
+                  </button>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-slate-800">
-                  📅 Upcoming Tasks (Next 7 Days)
+                  {recurrenceFilter ? `${recurrenceFilter} Tasks` : '📅 Upcoming Tasks (Next 7 Days)'}
                 </h3>
                 <span className="text-xs text-slate-500">
-                  Reminder View
+                  {recurrenceFilter ? 'All Tasks View' : 'Reminder View'}
                 </span>
               </div>
               
               {(() => {
+                // If recurrence filter is active, show all tasks for that recurrence
+                if (recurrenceFilter) {
+                  const filteredTasks = getTasksByRecurrence(recurrenceFilter);
+                  
+                  if (filteredTasks.length === 0) {
+                    return (
+                      <div className="text-center py-12">
+                        <Calendar className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                        <p className="text-sm text-slate-500">No {recurrenceFilter.toLowerCase()} tasks found</p>
+                      </div>
+                    );
+                  }
+
+                  const recurrenceConfig = {
+                    'DAILY': { icon: '🔄', color: 'bg-blue-50 border-blue-200', label: 'Daily Tasks' },
+                    'WEEKLY': { icon: '📅', color: 'bg-purple-50 border-purple-200', label: 'Weekly Tasks' },
+                    'MONTHLY': { icon: '🗓️', color: 'bg-green-50 border-green-200', label: 'Monthly Tasks' },
+                    'QUARTERLY': { icon: '📊', color: 'bg-orange-50 border-orange-200', label: 'Quarterly Tasks' },
+                    'SEMESTER': { icon: '📆', color: 'bg-indigo-50 border-indigo-200', label: 'Semester Tasks' },
+                    'YEARLY': { icon: '🎯', color: 'bg-red-50 border-red-200', label: 'Yearly Tasks' },
+                    'ONCE': { icon: '📌', color: 'bg-slate-50 border-slate-200', label: 'One-time Tasks' },
+                  };
+
+                  const config = recurrenceConfig[recurrenceFilter as keyof typeof recurrenceConfig];
+
+                  return (
+                    <div className={`border-2 rounded-lg p-4 ${config.color}`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-2xl">{config.icon}</span>
+                        <h4 className="text-sm font-bold text-slate-800">{config.label}</h4>
+                        <span className="text-xs bg-white px-2 py-0.5 rounded-full font-semibold text-slate-600">
+                          {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {filteredTasks.map((taskData) => {
+                          const { template, assignees } = taskData;
+                          
+                          return (
+                            <div key={template.id} className="bg-white rounded-lg p-3 border border-slate-200 hover:shadow-md transition-shadow">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-slate-800 truncate">
+                                    {template.title}
+                                  </p>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                    {template.category}
+                                  </p>
+                                  <div className="flex items-center gap-3 mt-2 text-xs text-slate-600">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="w-3 h-3" />
+                                      {assignees.length} instance{assignees.length !== 1 ? 's' : ''}
+                                      {template.dueTime && (
+                                        <span className="text-blue-600 font-medium">at {template.dueTime}</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  {/* Assigned Users */}
+                                  <div className="mt-2 flex flex-wrap gap-1">
+                                    {assignees.slice(0, 5).map((assignee, idx) => (
+                                      <span 
+                                        key={idx}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 text-xs rounded-full"
+                                      >
+                                        <div className="w-4 h-4 bg-blue-100 rounded-full flex items-center justify-center">
+                                          <span className="text-[8px] font-bold text-blue-700">
+                                            {assignee.assignee?.name ? formatName(assignee.assignee.name).charAt(0) : '?'}
+                                          </span>
+                                        </div>
+                                        {assignee.assignee?.name ? formatName(assignee.assignee.name) : 'Unassigned'}
+                                        <span className="text-slate-500">({assignee.dueDate})</span>
+                                      </span>
+                                    ))}
+                                    {assignees.length > 5 && (
+                                      <span className="text-xs text-slate-500">
+                                        +{assignees.length - 5} more
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Default: Show upcoming tasks (next 7 days)
                 const groupedTasks = getUpcomingTasksByRecurrence();
                 const hasAnyTasks = Object.values(groupedTasks).some(tasks => tasks.length > 0);
                 
@@ -293,6 +490,7 @@ export default function PublicDashboard() {
                   'WEEKLY': { icon: '📅', color: 'bg-purple-50 border-purple-200', label: 'Weekly Tasks' },
                   'MONTHLY': { icon: '🗓️', color: 'bg-green-50 border-green-200', label: 'Monthly Tasks' },
                   'QUARTERLY': { icon: '📊', color: 'bg-orange-50 border-orange-200', label: 'Quarterly Tasks' },
+                  'SEMESTER': { icon: '📆', color: 'bg-indigo-50 border-indigo-200', label: 'Semester Tasks' },
                   'YEARLY': { icon: '🎯', color: 'bg-red-50 border-red-200', label: 'Yearly Tasks' },
                   'ONCE': { icon: '📌', color: 'bg-slate-50 border-slate-200', label: 'One-time Tasks' },
                 };
@@ -459,7 +657,7 @@ export default function PublicDashboard() {
         {/* Footer */}
         <footer className="mt-12 pt-8 border-t border-slate-200 text-center">
           <p className="text-xs text-slate-500">
-            © 2025 DILG Region NIR • Siquijor Provincial Office
+            © 2025 D.E.N.N.I.S. • DILG Region NIR • Siquijor Provincial Office
           </p>
           <p className="text-xs text-slate-400 mt-1">
             Republic of the Philippines

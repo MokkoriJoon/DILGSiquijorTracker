@@ -56,8 +56,8 @@ export default function Login() {
             <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
               <Building2 className="w-9 h-9 text-white" />
             </div>
-            <h1 className="text-xl font-bold text-slate-800">DILG Task Tracker</h1>
-            <p className="text-sm text-slate-500 mt-1">Sign in to your account</p>
+            <h1 className="text-xl font-bold text-slate-800">D.E.N.N.I.S.</h1>
+            <p className="text-sm text-slate-500 mt-1">Digital Ecosystem for Navigation, Notifications, Information, and Schedules</p>
           </div>
 
           {error && (
@@ -121,13 +121,10 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Register link */}
+          {/* Contact admin message */}
           <div className="mt-6 text-center">
             <p className="text-sm text-slate-600">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
-                Register here
-              </Link>
+              Don't have an account? <span className="font-medium">Contact the Admin</span>
             </p>
           </div>
         </div>
