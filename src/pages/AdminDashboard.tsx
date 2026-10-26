@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DatabaseService } from '../services/database';
 import {
@@ -14,6 +15,7 @@ import { formatName } from '../utils/format';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<'stats' | 'kanban'>('stats');
   const [dashboardScope, setDashboardScope] = useState<'all' | 'my'>('my'); // Default to 'my' for logged-in users
   const [stats, setStats] = useState({
@@ -269,7 +271,11 @@ export default function AdminDashboard() {
                   .filter(t => t.status === 'OVERDUE' || t.status === 'PENDING')
                   .slice(0, 8)
                   .map((task) => (
-                    <div key={task.id} className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <div 
+                      key={task.id} 
+                      onClick={() => navigate(`/my-tasks?highlight=${task.id}`)}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+                    >
                       <div className={`w-2 h-2 rounded-full ${task.status === 'OVERDUE' ? 'bg-red-500' : 'bg-amber-500'}`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-700 truncate">{task.template?.title}</p>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { DatabaseService } from '../services/database';
 import { NotificationService } from '../services/notification';
@@ -7,6 +8,8 @@ import { CheckCircle2, Clock, AlertTriangle, Calendar, Tag, Upload, Send, Extern
 
 export default function MyTasks() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const highlightTaskId = searchParams.get('highlight');
   const [tasks, setTasks] = useState<TaskInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
@@ -16,6 +19,23 @@ export default function MyTasks() {
   useEffect(() => {
     loadTasks();
   }, [user]);
+
+  useEffect(() => {
+    if (highlightTaskId) {
+      // Scroll to the highlighted task after a short delay
+      setTimeout(() => {
+        const element = document.getElementById(`task-${highlightTaskId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Add a temporary highlight effect
+          element.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2');
+          setTimeout(() => {
+            element.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2');
+          }, 3000);
+        }
+      }, 300);
+    }
+  }, [highlightTaskId, tasks]);
 
   async function loadTasks() {
     if (!user) return;
@@ -139,7 +159,7 @@ export default function MyTasks() {
           </div>
         ) : (
           filteredTasks.map((task) => (
-            <div key={task.id} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-all">
+            <div key={task.id} id={`task-${task.id}`} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-all">
               <div className="flex items-start gap-4">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
                   task.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :

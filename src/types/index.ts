@@ -11,6 +11,7 @@ export interface User {
   name: string;
   role: Role;
   department: string;
+  position?: string;
   avatar?: string;
   createdAt: string;
 }
