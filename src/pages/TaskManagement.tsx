@@ -115,6 +115,22 @@ export default function TaskManagement() {
                       {template.recurrence}
                       {template.dueDay && ` (Day ${template.dueDay})`}
                     </span>
+                    {template.dueTime && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                        <Clock className="w-3 h-3" />
+                        {template.dueTime}
+                      </span>
+                    )}
+                    {template.startDate && template.recurrence === 'DAILY' && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                        Starts: {template.startDate}
+                      </span>
+                    )}
+                    {template.dueDaysOfWeek && template.dueDaysOfWeek.length > 0 && template.recurrence === 'DAILY' && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700">
+                        {template.dueDaysOfWeek.map(d => d.substring(0, 3)).join(', ')}
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
                       <Tag className="w-3 h-3" />
                       {template.category}
