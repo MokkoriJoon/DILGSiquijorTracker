@@ -541,7 +541,7 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
           {recurrence === 'DAILY' && (
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <label className="block text-sm font-medium text-slate-700 mb-2">
-                Recur on哪些 days? *
+                Recur on which days? *
               </label>
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <label className="flex items-center gap-2 cursor-pointer">

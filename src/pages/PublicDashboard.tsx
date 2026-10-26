@@ -214,54 +214,29 @@ export default function PublicDashboard() {
           </div>
         </div>
 
-        {/* Filter Indicator */}
-        {statusFilter && (
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-blue-900">
-                Showing: <span className="font-bold">{statusFilter}</span> tasks
-              </span>
-              <span className="text-xs text-blue-700">
-                ({statusFilter === 'TOTAL' ? stats.total : 
-                  statusFilter === 'COMPLETED' ? stats.completed :
-                  statusFilter === 'PENDING' ? stats.pending :
-                  stats.overdue} tasks)
-              </span>
-            </div>
-            <button
-              onClick={() => setStatusFilter(null)}
-              className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Clear Filter
-            </button>
-          </div>
-        )}
 
-        {/* Completion Rate Banner */}
-        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-6 mb-6 text-white shadow-lg">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center">
-                <TrendingUp className="w-8 h-8" />
-              </div>
-              <div>
-                <p className="text-emerald-100 text-sm">Overall Completion Rate</p>
-                <p className="text-4xl font-bold">{stats.completionRate}%</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-emerald-100 text-sm">Target: 85%</p>
-              <div className="w-48 bg-white/20 rounded-full h-3 mt-2">
-                <div className="bg-white rounded-full h-3" style={{ width: `${stats.completionRate}%` }} />
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Main Content: Charts on left, Tasks on right */}
+        {/* Main Content: Completion Rate on top, then Charts on left, Tasks on right */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Charts Column - Left Side */}
+          {/* Completion Rate + Charts Column - Left Side */}
           <div className="lg:col-span-1 space-y-4">
+            {/* Completion Rate Banner */}
+            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl p-4 text-white shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <TrendingUp className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-emerald-100 text-xs">Overall Completion Rate</p>
+                  <p className="text-2xl font-bold">{stats.completionRate}%</p>
+                  <p className="text-emerald-100 text-xs mt-1">Target: 85%</p>
+                </div>
+              </div>
+              <div className="w-full bg-white/20 rounded-full h-2 mt-3">
+                <div className="bg-white rounded-full h-2" style={{ width: `${stats.completionRate}%` }} />
+              </div>
+            </div>
+
             {/* Department Performance */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
               <h3 className="text-sm font-semibold text-slate-800 mb-2">By Municipality</h3>
@@ -314,17 +289,10 @@ export default function PublicDashboard() {
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-semibold text-slate-800">
-              {statusFilter ? `Filtered Tasks - ${statusFilter}` : 'All Tasks (Read-Only View)'}
+              All Tasks (Read-Only View)
             </h3>
             <span className="text-xs text-slate-500">
-              {statusFilter 
-                ? `${instances.filter(t => {
-                    if (statusFilter === 'TOTAL') return true;
-                    if (statusFilter === 'PENDING') return t.status === 'PENDING' || t.status === 'IN_PROGRESS' || t.status === 'SUBMITTED';
-                    return t.status === statusFilter;
-                  }).length} tasks`
-                : `${instances.length} total tasks`
-              }
+              {instances.length} total tasks
             </span>
           </div>
           

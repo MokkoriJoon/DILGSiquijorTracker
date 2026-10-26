@@ -201,9 +201,9 @@ export default function AdminDashboard() {
 
       {viewMode === 'stats' ? (
         <>
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Completion Rate */}
+          {/* Charts Row - Completion Overview, Department Rates, and Overdue Tasks */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Completion Overview */}
             <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-800 mb-4">Completion Overview</h3>
               <div className="h-56 flex items-center justify-center">
@@ -230,7 +230,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Department Performance */}
+            {/* Department Completion Rates */}
             <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-800 mb-4">Department Completion Rates</h3>
               <div className="h-56">
@@ -251,35 +251,9 @@ export default function AdminDashboard() {
                 )}
               </div>
             </div>
-          </div>
 
-          {/* Status Breakdown & Overdue Tasks */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Overdue & At Risk Tasks */}
             <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-800 mb-4">Status Breakdown</h3>
-              <div className="space-y-3">
-                {[
-                  { label: 'Pending', count: stats.pending, color: 'bg-slate-400' },
-                  { label: 'Completed', count: stats.completed, color: 'bg-emerald-500' },
-                  { label: 'Overdue', count: stats.overdue, color: 'bg-red-500' },
-                ].map((item) => (
-                  <div key={item.label}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-slate-600">{item.label}</span>
-                      <span className="text-xs font-bold text-slate-700">{item.count}</span>
-                    </div>
-                    <div className="w-full bg-slate-100 rounded-full h-2">
-                      <div
-                        className={`${item.color} rounded-full h-2 transition-all duration-500`}
-                        style={{ width: `${stats.total > 0 ? (item.count / stats.total) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="lg:col-span-2 bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-slate-800">Overdue & At Risk Tasks</h3>
                 <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">
