@@ -24,6 +24,8 @@ export interface Notification {
 export const NotificationService = {
   // Get all notifications for a user
   async getUserNotifications(userId: string): Promise<Notification[]> {
+    console.log('[Notification] Fetching notifications for user:', userId);
+    
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
@@ -31,10 +33,15 @@ export const NotificationService = {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('[Notification] Error fetching notifications:', error);
+      console.error('[Notification] Error fetching notifications:', {
+        error,
+        userId,
+        message: 'Check if notifications table exists and RLS policies allow SELECT',
+      });
       return [];
     }
 
+    console.log('[Notification] Found', data?.length || 0, 'notifications for user', userId);
     return data || [];
   },
 
@@ -47,15 +54,97 @@ export const NotificationService = {
       .eq('read', false);
 
     if (error) {
-      console.error('[Notification] Error counting notifications:', error);
+      console.error('[Notification] Error counting notifications:', {
+        error,
+        userId,
+        message: 'Check if notifications table exists and RLS policies allow SELECT',
+      });
       return 0;
     }
 
+    console.log('[Notification] Unread count for user', userId, ':', count || 0);
     return count || 0;
+  },
+
+  // Diagnostic function to test notification system
+  async testNotificationSystem(userId: string): Promise<{
+    success: boolean;
+    message: string;
+    details?: any;
+  }> {
+    console.log('[Notification] Testing notification system for user:', userId);
+
+    try {
+      // Test 1: Check if table exists
+      const { error: tableError } = await supabase
+        .from('notifications')
+        .select('id')
+        .limit(1);
+
+      if (tableError) {
+        return {
+          success: false,
+          message: 'Notifications table does not exist or is not accessible',
+          details: tableError,
+        };
+      }
+
+      // Test 2: Try to create a test notification
+      const testNotification = await this.createNotification({
+        userId,
+        type: 'task_assigned',
+        title: 'Test Notification',
+        message: 'This is a test notification to verify the system is working',
+      });
+
+      if (!testNotification) {
+        return {
+          success: false,
+          message: 'Failed to create test notification. Check RLS policies.',
+        };
+      }
+
+      // Test 3: Try to fetch the notification
+      const notifications = await this.getUserNotifications(userId);
+      const found = notifications.some(n => n.id === testNotification.id);
+
+      if (!found) {
+        return {
+          success: false,
+          message: 'Test notification was created but cannot be fetched. Check RLS SELECT policy.',
+        };
+      }
+
+      // Test 4: Clean up test notification
+      await this.deleteNotification(testNotification.id);
+
+      return {
+        success: true,
+        message: 'Notification system is working correctly!',
+        details: {
+          tableExists: true,
+          canCreate: true,
+          canRead: true,
+          canDelete: true,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Unexpected error during notification system test',
+        details: error,
+      };
+    }
   },
 
   // Create a new notification
   async createNotification(notification: Omit<Notification, 'id' | 'createdAt' | 'read'>): Promise<Notification | null> {
+    console.log('[Notification] Creating notification:', {
+      userId: notification.userId,
+      type: notification.type,
+      title: notification.title,
+    });
+
     const { data, error } = await supabase
       .from('notifications')
       .insert({
@@ -72,9 +161,15 @@ export const NotificationService = {
       .single();
 
     if (error) {
-      console.error('[Notification] Error creating notification:', error);
+      console.error('[Notification] Error creating notification:', {
+        error,
+        notification,
+        message: 'Check if notifications table exists and RLS policies are set up correctly',
+      });
       return null;
     }
+
+    console.log('[Notification] Notification created successfully:', data.id);
 
     return {
       id: data.id,

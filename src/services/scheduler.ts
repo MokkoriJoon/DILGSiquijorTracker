@@ -234,44 +234,76 @@ export const SchedulerService = {
   },
 
   /**
-   * Mark tasks as OVERDUE if past due date and return the list of overdue tasks
+   * Mark tasks as OVERDUE if past due date/time and return the list of overdue tasks
    */
   async markOverdueTasks(): Promise<{ marked: any[]; errors: string[] }> {
     const errors: string[] = [];
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:MM format
 
-    // First, get the tasks that will be marked as overdue
-    const { data: tasksToMark, error: fetchError } = await supabase
+    console.log('[Scheduler] Marking overdue tasks. Current date:', today, 'Time:', currentTime);
+
+    // First, get ALL tasks that should be checked
+    const { data: tasksToCheck, error: fetchError } = await supabase
       .from('task_instances')
       .select(`
         *,
         template:task_templates(*)
       `)
-      .lt('due_date', today)
       .in('status', ['PENDING', 'IN_PROGRESS']);
 
     if (fetchError) {
+      console.error('[Scheduler] Error fetching tasks:', fetchError);
       errors.push(`Failed to fetch tasks to mark overdue: ${fetchError.message}`);
       return { marked: [], errors };
     }
 
-    if (!tasksToMark || tasksToMark.length === 0) {
+    if (!tasksToCheck || tasksToCheck.length === 0) {
+      console.log('[Scheduler] No tasks found to check');
+      return { marked: [], errors };
+    }
+
+    console.log('[Scheduler] Found', tasksToCheck.length, 'tasks to check');
+
+    // Filter tasks that are actually overdue
+    const overdueTasks = tasksToCheck.filter(task => {
+      // If due date is before today, it's overdue
+      if (task.due_date < today) {
+        return true;
+      }
+      
+      // If due date is today and there's a due time, check if time has passed
+      if (task.due_date === today && task.due_time) {
+        return task.due_time < currentTime;
+      }
+      
+      // If due date is today but no time specified, don't mark as overdue yet
+      return false;
+    });
+
+    console.log('[Scheduler] Found', overdueTasks.length, 'overdue tasks');
+
+    if (overdueTasks.length === 0) {
       return { marked: [], errors };
     }
 
     // Mark them as OVERDUE
+    const taskIds = overdueTasks.map(t => t.id);
     const { error: updateError } = await supabase
       .from('task_instances')
       .update({ status: 'OVERDUE' })
-      .lt('due_date', today)
-      .in('status', ['PENDING', 'IN_PROGRESS']);
+      .in('id', taskIds);
 
     if (updateError) {
+      console.error('[Scheduler] Error updating tasks:', updateError);
       errors.push(`Failed to mark tasks as overdue: ${updateError.message}`);
       return { marked: [], errors };
     }
 
-    return { marked: tasksToMark, errors };
+    console.log('[Scheduler] Successfully marked', overdueTasks.length, 'tasks as OVERDUE');
+
+    return { marked: overdueTasks, errors };
   },
 
   /**
