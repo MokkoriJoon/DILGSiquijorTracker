@@ -574,31 +574,10 @@ export const UserService = {
     // Update the users table
     const result = await DatabaseService.updateUser(id, updates);
     
-    // If password was updated, also update Supabase Auth
+    // If password was updated, it's stored in the users table
+    // We'll use custom authentication that checks the users table
     if (result.success && updates.password) {
-      try {
-        // Use Supabase Admin API to update password in Auth
-        const { error: authError } = await supabase.auth.admin.updateUserById(
-          id,
-          { password: updates.password }
-        );
-        
-        if (authError) {
-          console.error('[Auth] Failed to update password in Supabase Auth:', authError);
-          return { 
-            success: false, 
-            error: 'Password updated in database but failed to update authentication. Please try again.' 
-          };
-        }
-        
-        console.log('[Auth] Password updated successfully in Supabase Auth for user:', id);
-      } catch (error) {
-        console.error('[Auth] Exception updating password in Supabase Auth:', error);
-        return { 
-          success: false, 
-          error: 'Password updated in database but failed to update authentication. Please try again.' 
-        };
-      }
+      console.log('[Auth] Password updated in users table for user:', id);
     }
     
     return result;

@@ -73,7 +73,7 @@ export const AuthService = {
 
       console.log('[Auth] Auth user created:', authData.user.id);
 
-      // Insert user profile into database
+      // Insert user profile into database with password for custom auth fallback
       const { data: profileData, error: profileError } = await supabase
         .from('users')
         .upsert(
@@ -83,6 +83,7 @@ export const AuthService = {
             name: fullName,
             department,
             role,
+            password, // Store password for custom authentication fallback
           },
           { onConflict: 'id' }
         )
@@ -135,45 +136,66 @@ export const AuthService = {
 
   /**
    * Login user
+   * Tries Supabase Auth first, falls back to custom authentication
    */
   async login(email: string, password: string): Promise<AuthResult> {
     try {
       console.log('[Auth] Login attempt for:', email);
 
+      // First, try Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (authError) {
-        console.error('[Auth] Login error:', authError);
+      if (!authError && authData?.user) {
+        console.log('[Auth] Supabase Auth successful, fetching profile...');
+
+        // Fetch user profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authData.user.id)
+          .single();
+
+        if (!profileError && profileData) {
+          console.log('[Auth] Login successful via Supabase Auth');
+          return {
+            success: true,
+            user: this.mapUser(profileData),
+          };
+        }
+      }
+
+      // Fallback: Custom authentication using users table password
+      console.log('[Auth] Trying custom authentication...');
+      
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .single();
+
+      if (userError || !userData) {
+        console.error('[Auth] User not found:', userError);
         return { success: false, error: 'Invalid email or password' };
       }
 
-      if (!authData?.user) {
-        return { success: false, error: 'Authentication failed' };
+      // Check password from users table
+      if (userData.password === password) {
+        console.log('[Auth] Custom authentication successful');
+        
+        // Store user info in sessionStorage for session management
+        sessionStorage.setItem('dilg_current_user', JSON.stringify(userData));
+        
+        return {
+          success: true,
+          user: this.mapUser(userData),
+        };
       }
 
-      console.log('[Auth] Auth successful, fetching profile...');
-
-      // Fetch user profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single();
-
-      if (profileError || !profileData) {
-        console.error('[Auth] Profile fetch error:', profileError);
-        return { success: false, error: 'User profile not found' };
-      }
-
-      console.log('[Auth] Login successful');
-
-      return {
-        success: true,
-        user: this.mapUser(profileData),
-      };
+      console.error('[Auth] Password mismatch');
+      return { success: false, error: 'Invalid email or password' };
     } catch (error) {
       console.error('[Auth] Login exception:', error);
       return {
@@ -190,6 +212,7 @@ export const AuthService = {
     try {
       console.log('[Auth] Logging out...');
       await supabase.auth.signOut();
+      sessionStorage.removeItem('dilg_current_user');
       console.log('[Auth] Logout successful');
     } catch (error) {
       console.error('[Auth] Logout error:', error);
@@ -201,6 +224,20 @@ export const AuthService = {
    */
   async getCurrentUser(): Promise<User | null> {
     try {
+      // First check sessionStorage for custom auth session
+      const storedUser = sessionStorage.getItem('dilg_current_user');
+      if (storedUser) {
+        try {
+          const userData = JSON.parse(storedUser);
+          console.log('[Auth] Found user in sessionStorage');
+          return this.mapUser(userData);
+        } catch (e) {
+          console.error('[Auth] Error parsing stored user:', e);
+          sessionStorage.removeItem('dilg_current_user');
+        }
+      }
+
+      // Then check Supabase Auth
       const { data: { user: authUser } } = await supabase.auth.getUser();
       
       if (!authUser) {

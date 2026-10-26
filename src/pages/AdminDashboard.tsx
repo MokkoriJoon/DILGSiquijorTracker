@@ -202,14 +202,14 @@ export default function AdminDashboard() {
       {viewMode === 'stats' ? (
         <>
           {/* Charts Row - Completion Overview, Department Rates, and Overdue Tasks */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Completion Overview */}
-            <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-800 mb-4">Completion Overview</h3>
-              <div className="h-56 flex items-center justify-center">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Completion Overview - Smaller width */}
+            <div className="lg:col-span-3 bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-800 mb-3">Completion Overview</h3>
+              <div className="flex items-center justify-center">
                 <div className="text-center">
-                  <div className="relative w-32 h-32 mx-auto">
-                    <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 120 120">
+                  <div className="relative w-24 h-24 mx-auto">
+                    <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 120 120">
                       <circle cx="60" cy="60" r="50" stroke="#e2e8f0" strokeWidth="10" fill="none" />
                       <circle
                         cx="60" cy="60" r="50"
@@ -221,39 +221,39 @@ export default function AdminDashboard() {
                       />
                     </svg>
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-2xl font-bold text-slate-800">{stats.completionRate}%</span>
+                      <span className="text-xl font-bold text-slate-800">{stats.completionRate}%</span>
                     </div>
                   </div>
-                  <p className="text-sm text-slate-500 mt-3">Overall Completion Rate</p>
-                  <p className="text-xs text-slate-400">{stats.completed} of {stats.total} tasks completed</p>
+                  <p className="text-xs text-slate-500 mt-2">Overall Completion Rate</p>
+                  <p className="text-xs text-slate-400">{stats.completed} of {stats.total} tasks</p>
                 </div>
               </div>
             </div>
 
-            {/* Department Completion Rates */}
-            <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-800 mb-4">Department Completion Rates</h3>
-              <div className="h-56">
+            {/* Department Completion Rates - Smaller width */}
+            <div className="lg:col-span-3 bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-800 mb-3">Department Rates</h3>
+              <div className="h-40">
                 {departmentChartData().length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={departmentChartData()} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" domain={[0, 100]} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} stroke="#94a3b8" width={100} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '12px' }} />
+                      <XAxis type="number" tick={{ fontSize: 9 }} stroke="#94a3b8" domain={[0, 100]} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 8 }} stroke="#94a3b8" width={80} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '10px' }} />
                       <Bar dataKey="completionRate" fill="#1e40af" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-slate-400 text-sm">
-                    No data yet. Create tasks to see department performance.
+                  <div className="h-full flex items-center justify-center text-slate-400 text-xs">
+                    No data yet
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Overdue & At Risk Tasks */}
-            <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
+            {/* Overdue & At Risk Tasks - Wider */}
+            <div className="lg:col-span-6 bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-slate-800">Overdue & At Risk Tasks</h3>
                 <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">
@@ -263,7 +263,7 @@ export default function AdminDashboard() {
               <div className="space-y-2">
                 {instances
                   .filter(t => t.status === 'OVERDUE' || t.status === 'PENDING')
-                  .slice(0, 5)
+                  .slice(0, 8)
                   .map((task) => (
                     <div key={task.id} className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
                       <div className={`w-2 h-2 rounded-full ${task.status === 'OVERDUE' ? 'bg-red-500' : 'bg-amber-500'}`} />
