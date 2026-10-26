@@ -277,9 +277,17 @@ export const DatabaseService = {
 
       // Add instances for new users
       if (usersToAdd.length > 0) {
-        const dueDate = template.recurrence === 'ONCE' 
-          ? new Date().toISOString().split('T')[0]
-          : calculateNextDueDate(template.recurrence, template.due_day || 25);
+        let dueDate: string;
+        
+        if (template.recurrence === 'ONCE') {
+          dueDate = new Date().toISOString().split('T')[0];
+        } else if (template.recurrence === 'DAILY' && template.start_date) {
+          // For DAILY tasks, use the start_date
+          dueDate = template.start_date;
+        } else {
+          // For other recurring tasks, calculate next due date
+          dueDate = calculateNextDueDate(template.recurrence, template.due_day || 25);
+        }
 
         const newInstances = usersToAdd.map(userId => ({
           template_id: templateId,
