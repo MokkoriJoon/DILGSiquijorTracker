@@ -139,6 +139,7 @@ export default function ResourceLinks() {
                       <span className="inline-flex items-center gap-1 text-xs text-slate-500">
                         <Calendar className="w-3 h-3" />
                         Due: {task.dueDate}
+                        {task.template?.dueTime && <span className="ml-1 text-blue-600 font-medium">at {task.template.dueTime}</span>}
                       </span>
                       <span className="inline-flex items-center gap-1 text-xs text-slate-500">
                         <Tag className="w-3 h-3" />
