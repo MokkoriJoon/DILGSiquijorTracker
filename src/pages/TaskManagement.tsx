@@ -320,47 +320,36 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
       const template = result.template;
       console.log('[CreateTask] Template created:', template.id);
 
-      // Save task assignments to task_assignments table
+      // Save task assignments - this will also create initial instances
       console.log('[CreateTask] Saving assignments for', selectedUsers.length, 'users...');
       const assignmentsSaved = await DatabaseService.updateTaskAssignments(template.id, selectedUsers);
       
       if (!assignmentsSaved) {
-        console.warn('[CreateTask] Failed to save assignments, but continuing...');
+        console.warn('[CreateTask] Failed to save assignments');
+        setError('Failed to assign users to task');
+        setLoading(false);
+        return;
       }
 
-      // Create initial instances for each selected user
-      console.log('[CreateTask] Creating initial instances for', selectedUsers.length, 'users...');
+      // Send notifications to all assigned users
+      console.log('[CreateTask] Sending notifications to assigned users...');
       for (const userId of selectedUsers) {
         let initialDueDate: string;
         
         if (recurrence === 'ONCE') {
           initialDueDate = dueDate;
         } else if (recurrence === 'DAILY') {
-          // For daily tasks, find the next occurrence based on selected days
           initialDueDate = calculateNextDailyDueDate(dueDaysOfWeek, dueTime);
         } else {
           initialDueDate = calculateNextDueDate(recurrence, dueDay);
         }
 
-        const instanceResult = await DatabaseService.createInstance({
-          templateId: template.id,
-          assignedTo: userId,
-          dueDate: initialDueDate,
-          dueTime: recurrence === 'DAILY' ? dueTime : undefined,
-          status: 'PENDING',
-        });
-
-        if (!instanceResult) {
-          console.warn('[CreateTask] Failed to create instance for user:', userId);
-        } else {
-          // Send notification to assigned user
-          await NotificationService.notifyTaskAssignment(
-            instanceResult.id,
-            template.title,
-            userId,
-            initialDueDate
-          );
-        }
+        await NotificationService.notifyTaskAssignment(
+          template.id,
+          template.title,
+          userId,
+          initialDueDate
+        );
       }
 
       console.log('[CreateTask] Task creation complete!');
