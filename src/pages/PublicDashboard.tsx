@@ -358,6 +358,7 @@ export default function PublicDashboard() {
                                 <span className="text-sm text-slate-600 flex items-center gap-1">
                                   <Calendar className="w-3 h-3" />
                                   {task.dueDate}
+                                  {task.template?.dueTime && <span className="text-blue-600 font-medium">at {task.template.dueTime}</span>}
                                 </span>
                               </td>
                               <td className="px-4 py-3">

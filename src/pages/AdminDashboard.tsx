@@ -276,7 +276,10 @@ export default function AdminDashboard() {
                         <p className="text-xs text-slate-500">{task.assignee?.name ? formatName(task.assignee.name) : 'Unassigned'} • {task.assignee?.department}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs font-medium text-slate-600">Due: {task.dueDate}</p>
+                        <p className="text-xs font-medium text-slate-600">
+                          Due: {task.dueDate}
+                          {task.template?.dueTime && <span className="ml-1 text-blue-600">at {task.template.dueTime}</span>}
+                        </p>
                         <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
                           task.status === 'OVERDUE' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
                         }`}>
@@ -358,6 +361,7 @@ export default function AdminDashboard() {
                           <span className="text-[10px] text-slate-400 flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {task.dueDate}
+                            {task.template?.dueTime && <span className="text-blue-600 font-medium">{task.template.dueTime}</span>}
                           </span>
                           <span className="text-[10px] text-slate-400">{task.template?.category}</span>
                         </div>
