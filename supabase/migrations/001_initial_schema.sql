@@ -1,5 +1,4 @@
 -- DILG Tracker Database Migration
--- Run this on your PostgreSQL/Supabase instance
 -- Made fully idempotent (safe to run multiple times)
 
 -- ==========================================
@@ -128,22 +127,8 @@ CREATE INDEX IF NOT EXISTS "idx_notifications_read" ON "notifications"("read");
 CREATE INDEX IF NOT EXISTS "idx_uploaded_files_task" ON "uploaded_files"("task_id");
 
 -- ==========================================
--- 4. SEED DATA (Made Idempotent)
+-- 4. ROW LEVEL SECURITY (RLS)
 -- ==========================================
--- Insert default email config ONLY if the table is empty
-INSERT INTO "email_config" ("enabled", "reminder_days", "overdue_alert", "completion_alert", "daily_digest")
-SELECT false, 3, true, true, false
-WHERE NOT EXISTS (SELECT 1 FROM "email_config");
-
--- Seed admin user (Ignores if email already exists)
-INSERT INTO "users" ("email", "name", "password", "role", "department")
-VALUES ('admin@dilg.gov.ph', 'Maria Santos', '$2b$10$placeholder_hash', 'ADMIN', 'Central Office')
-ON CONFLICT ("email") DO NOTHING;
-
--- ==========================================
--- 5. ROW LEVEL SECURITY (RLS)
--- ==========================================
--- ENABLE RLS is already idempotent in PostgreSQL
 ALTER TABLE "users" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "task_templates" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "task_instances" ENABLE ROW LEVEL SECURITY;
