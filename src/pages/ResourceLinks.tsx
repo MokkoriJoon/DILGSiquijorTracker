@@ -359,7 +359,14 @@ function BookmarkModal({ bookmark, userId, onClose, onSaved }: {
         });
 
         if (!result.success) {
-          setError(result.error || 'Failed to create bookmark');
+          // Diagnose RLS/session problems for "old users" so the error is
+          // actionable instead of a cryptic row-level-security message.
+          let msg = result.error || 'Failed to create bookmark';
+          try {
+            const diagnosis = await DatabaseService.diagnoseWriteAccess(userId);
+            if (diagnosis) msg = diagnosis;
+          } catch { /* ignore */ }
+          setError(msg);
           setLoading(false);
           return;
         }

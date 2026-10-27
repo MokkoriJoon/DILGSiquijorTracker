@@ -184,7 +184,81 @@ export const AuthService = {
       // Check password from users table
       if (userData.password === password) {
         console.log('[Auth] Custom authentication successful');
-        
+
+        // IMPORTANT: "Old users" (created before Supabase Auth was wired up, or
+        // whose auth row is missing / has no logs) have NO valid Supabase session.
+        // Without one, every RLS policy that checks auth.uid() fails silently —
+        // inserts/updates on task_templates, task_instances and
+        // personal_bookmarks are rejected ("new row violates row-level security
+        // policy"), which is why these users could not add/assign/edit tasks or
+        // bookmarks. To repair them, create (or reset) their Supabase Auth user
+        // with the SAME uuid as their public.users.id and sign in with it so a
+        // real JWT/session exists.
+        try {
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+
+          if (signInError) {
+            // No usable auth user for this account yet — provision one keyed to
+            // the existing profile id (same uuid as public.users.id) via the
+            // server-side repair endpoint, which uses the service role key.
+            console.warn('[Auth] No Supabase session for this user; provisioning auth account...', signInError.message);
+
+            let provisioned = false;
+            try {
+              const res = await fetch('/api/admin-create-auth-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: userData.id, email, password }),
+              });
+              if (res.ok) {
+                provisioned = true;
+                console.log('[Auth] Auth account provisioned for', email);
+              } else {
+                console.warn('[Auth] admin-create-auth-user returned status ' + res.status +
+                  '. Deploy the endpoint or run FIX_OLD_USERS_AUTH_RLS.sql.');
+              }
+            } catch (e) {
+              console.warn('[Auth] Could not call admin-create-auth-user:', e);
+            }
+
+            if (provisioned) {
+              // Sign in with the freshly provisioned auth account so a real JWT
+              // session exists and auth.uid() works in all RLS policies.
+              const retry = await supabase.auth.signInWithPassword({ email, password });
+              if (retry.error) {
+                console.warn('[Auth] Retry sign-in failed:', retry.error.message);
+              }
+            }
+          } else if (signInData?.user && signInData.user.id !== userData.id) {
+            // Auth user exists but its id does not match the profile id — RLS
+            // policies comparing auth.uid() to user ids would fail. Repair the
+            // mapping once via the server endpoint (delete/recreate auth user
+            // with the correct uuid), then re-login.
+            console.warn('[Auth] auth uid mismatch:', signInData.user.id, '!=', userData.id, '- repairing...');
+            try {
+              const res = await fetch('/api/admin-create-auth-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: userData.id, email, password }),
+              });
+              if (res.ok) {
+                await supabase.auth.signOut();
+                const retry = await supabase.auth.signInWithPassword({ email, password });
+                if (retry.error) {
+                  console.warn('[Auth] Re-sign-in after repair failed:', retry.error.message);
+                }
+              }
+            } catch (e) {
+              console.warn('[Auth] uid repair endpoint unavailable:', e);
+            }
+          }
+        } catch (e) {
+          console.warn('[Auth] Session provisioning exception:', e);
+        }
+
         // Store user info in sessionStorage for session management
         sessionStorage.setItem('dilg_current_user', JSON.stringify(userData));
         
