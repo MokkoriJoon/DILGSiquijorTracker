@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useSiteSettings } from '../context/SiteSettingsContext';
 import { supabase } from '../lib/supabase';
-import { Settings, Save, Image, Type, FileText, CheckCircle2 } from 'lucide-react';
+import { Settings, Save, Image, Type, FileText, CheckCircle2, Upload } from 'lucide-react';
+import { compressImage, formatFileSize, getCompressionRatio } from '../utils/imageCompression';
 
 interface SiteSettings {
   site_name: string;
@@ -91,29 +92,58 @@ export default function SiteSettingsPage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      setMessage({ type: 'error', text: 'Please upload an image file' });
+    // Validate file type - explicitly accept PNG, JPEG, JPG, WebP, SVG
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'];
+    if (!allowedTypes.includes(file.type)) {
+      setMessage({ type: 'error', text: 'Please upload a PNG, JPEG, WebP, or SVG image' });
       return;
     }
 
-    // Validate file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      setMessage({ type: 'error', text: 'Image must be less than 2MB' });
+    // Validate file size (max 5MB before compression)
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'Image must be less than 5MB' });
       return;
     }
 
     try {
-      // Upload to Supabase Storage
-      const fileExt = file.name.split('.').pop();
+      setMessage({ type: 'success', text: 'Compressing image...' });
+
+      // Compress image (skip for SVG as it's already optimized)
+      let fileToUpload: File | Blob = file;
+      let compressionInfo = '';
+
+      if (file.type !== 'image/svg+xml') {
+        const originalSize = file.size;
+        
+        // Determine output format - preserve PNG transparency
+        const outputType = file.type === 'image/png' ? 'image/png' : 'image/webp';
+        
+        fileToUpload = await compressImage(file, {
+          maxWidth: 800,
+          maxHeight: 800,
+          quality: 0.8,
+          outputType: outputType as any
+        });
+
+        const compressedSize = fileToUpload.size;
+        const ratio = getCompressionRatio(originalSize, compressedSize);
+        compressionInfo = ` (${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)}, ${ratio} smaller)`;
+      }
+
+      setMessage({ type: 'success', text: 'Uploading logo...' });
+
+      // Determine file extension
+      const fileExt = fileToUpload.type.split('/')[1] || 'png';
       const fileName = `logo-${Date.now()}.${fileExt}`;
       const filePath = `site/${fileName}`;
 
+      // Upload to Supabase Storage
       const { error: uploadError } = await supabase.storage
         .from('site-assets')
-        .upload(filePath, file, {
+        .upload(filePath, fileToUpload, {
           cacheControl: '3600',
-          upsert: false
+          upsert: false,
+          contentType: fileToUpload.type
         });
 
       if (uploadError) throw uploadError;
@@ -124,11 +154,26 @@ export default function SiteSettingsPage() {
         .getPublicUrl(filePath);
 
       setSettings({ ...settings, logo_url: publicUrl });
-      setMessage({ type: 'success', text: 'Logo uploaded successfully!' });
-      setTimeout(() => setMessage(null), 3000);
+      setMessage({ type: 'success', text: `Logo uploaded successfully${compressionInfo}!` });
+      setTimeout(() => setMessage(null), 5000);
     } catch (err) {
       console.error('Error uploading logo:', err);
-      setMessage({ type: 'error', text: 'Failed to upload logo' });
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      
+      // Provide helpful error messages
+      if (errorMessage.includes('bucket') || errorMessage.includes('storage')) {
+        setMessage({ 
+          type: 'error', 
+          text: 'Storage bucket not found. Please create "site-assets" bucket in Supabase Dashboard → Storage' 
+        });
+      } else if (errorMessage.includes('policy') || errorMessage.includes('permission')) {
+        setMessage({ 
+          type: 'error', 
+          text: 'Permission denied. Please check storage bucket RLS policies in Supabase' 
+        });
+      } else {
+        setMessage({ type: 'error', text: `Failed to upload logo: ${errorMessage}` });
+      }
     }
   }
 
@@ -232,13 +277,15 @@ export default function SiteSettingsPage() {
           <div className="flex items-center gap-3">
             <label className="flex-1 cursor-pointer">
               <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
-                <Image className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+                <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
                 <p className="text-sm text-slate-600">Click to upload logo</p>
-                <p className="text-xs text-slate-500 mt-1">PNG, JPG, SVG (max 2MB)</p>
+                <p className="text-xs text-slate-500 mt-1">PNG (with transparency), JPEG, WebP, SVG</p>
+                <p className="text-xs text-blue-600 mt-1 font-medium">✨ Auto-compressed for optimization</p>
+                <p className="text-xs text-slate-400 mt-1">Max 5MB before compression</p>
               </div>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml"
                 onChange={handleLogoUpload}
                 className="hidden"
               />

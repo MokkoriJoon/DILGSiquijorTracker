@@ -905,7 +905,7 @@ export default function PublicDashboard() {
         {/* Footer */}
         <footer className="mt-12 pt-8 border-t border-slate-200 text-center">
           <p className="text-xs text-slate-500">
-            © 2025 D.E.N.N.I.S. • DILG Region NIR • Siquijor Provincial Office
+            © 2026 D.E.N.N.I.S. • DILG Region NIR • Siquijor Provincial Office
           </p>
           <p className="text-xs text-slate-400 mt-1">
             Republic of the Philippines
