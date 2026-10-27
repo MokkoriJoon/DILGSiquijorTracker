@@ -134,12 +134,9 @@ export default function UserManagement() {
     if (confirm(`Delete user "${formatName(target.name)}"? This cannot be undone.`)) {
       const result = await UserService.delete(target.id);
       if (result && result.success === false) {
-        setDeleteError(
-          `Failed to delete user: ${result.error || 'Unknown error'}. ` +
-          'If this says row-level security blocked it, deploy api/admin-delete-user.ts ' +
-          '(with SUPABASE_SERVICE_ROLE_KEY set in Vercel) and run ' +
-          'FIX_USER_DELETE_PERMISSIONS.sql in the Supabase SQL Editor.'
-        );
+        // The server-side endpoint returns precise, actionable errors now —
+        // show them as-is instead of a generic RLS message.
+        setDeleteError(`Failed to delete user: ${result.error || 'Unknown error'}`);
       }
       await loadUsers();
     }

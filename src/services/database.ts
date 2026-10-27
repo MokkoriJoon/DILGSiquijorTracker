@@ -816,42 +816,69 @@ export const DatabaseService = {
     return (DatabaseService as any)._adminTokenPromise;
   },
 
+  /**
+   * POST to a server-side admin endpoint. Sends the shared-secret token when
+   * available, but ALWAYS sends the Bearer JWT — the endpoints accept a
+   * verified admin JWT alone as a bootstrap path (see api/_shared.ts), which
+   * makes deletes work even before the SQL migration / secrets row exists.
+   */
+  async callAdminEndpoint(
+    path: string,
+    payload: Record<string, any>,
+  ): Promise<{ ok: boolean; status: number; result: any; networkError?: string }> {
+    const token = await this.getAdminToken();
+    let accessToken: string | undefined;
+    try {
+      const { data } = await supabase.auth.getSession();
+      accessToken = data?.session?.access_token;
+    } catch {
+      /* legacy custom-login session: no JWT available */
+    }
+    try {
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(token ? { ...payload, token } : payload),
+      });
+      const result = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, result };
+    } catch (e) {
+      return {
+        ok: false,
+        status: 0,
+        result: {},
+        networkError: e instanceof Error ? e.message : 'Network error',
+      };
+    }
+  },
+
   async deleteUser(id: string): Promise<{ success: boolean; error?: string }> {
     // Deleting another user (especially one whose profile has no matching
     // auth.uid()) cannot be done through RLS with the anon key, and removing
     // the Supabase Auth account requires the service role. Both are handled
     // server-side by /api/admin-delete-user (see api/admin-delete-user.ts).
-    const token = await this.getAdminToken();
-    if (token) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch('/api/admin-delete-user', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-          },
-          body: JSON.stringify({ id, token }),
-        });
-        const result = await res.json().catch(() => ({}));
-        if (res.ok && result.success) {
-          return { success: true };
-        }
-        if (res.status === 404) {
-          // Endpoint not deployed yet - fall back to the client-side path below.
-          console.warn('[DB] /api/admin-delete-user not found; falling back to direct delete.');
-        } else {
-          console.error('[DB] Admin delete endpoint failed:', result);
-          return {
-            success: false,
-            error: result.error || `Server returned ${res.status}`,
-          };
-        }
-      } catch (e) {
-        console.warn('[DB] Admin delete endpoint unreachable; falling back to direct delete.', e);
-      }
+    const endpointHit = await this.callAdminEndpoint('/api/admin-delete-user', { id });
+    if (endpointHit.ok && endpointHit.result?.success) {
+      return { success: true };
+    }
+    if (endpointHit.status === 404) {
+      // Endpoint not deployed yet - fall back to the client-side path below.
+      console.warn('[DB] /api/admin-delete-user not found; falling back to direct delete.');
+    } else if (endpointHit.status !== 0) {
+      // The endpoint IS deployed — report its real error instead of silently
+      // falling through to an anon-key delete that RLS will block anyway.
+      console.error('[DB] Admin delete endpoint failed:', endpointHit.result);
+      return {
+        success: false,
+        error:
+          endpointHit.result?.error ||
+          `The delete endpoint returned HTTP ${endpointHit.status}. Check the Vercel function logs for /api/admin-delete-user.`,
+      };
     } else {
-      console.warn('[DB] No admin token available; trying direct delete (may be blocked by RLS).');
+      console.warn('[DB] Admin delete endpoint unreachable:', endpointHit.networkError);
     }
 
     // Fallback: direct deletes with the anon key (works only if the RLS
@@ -943,55 +970,29 @@ export const DatabaseService = {
    * request; the Bearer header is only sent when a real session exists.
    */
   async repairUserAuth(id: string): Promise<{ success: boolean; action?: string; temporaryPassword?: string; error?: string }> {
-    const token = await this.getAdminToken();
-    if (!token) {
+    // The endpoint accepts a verified admin JWT alone (bootstrap path) even
+    // when no shared-secret token is configured yet — see api/_shared.ts.
+    const hit = await this.callAdminEndpoint('/api/admin-repair-auth', { id });
+    if (hit.ok && hit.result?.success) {
       return {
-        success: false,
-        error:
-          'Admin token unavailable. Deploy api/admin-repair-auth.ts with SUPABASE_SERVICE_ROLE_KEY set, ' +
-          'run FIX_USER_DELETE_PERMISSIONS.sql (installs the gated get_service_token_hash RPC), ' +
-          'run FIX_OLD_USERS_AUTH_RLS.sql, or set VITE_SUPABASE_SERVICE_TOKEN.',
+        success: true,
+        action: hit.result.action,
+        temporaryPassword: hit.result.temporaryPassword,
       };
     }
-
-    try {
-      // Best-effort Bearer token — omitted silently for legacy sessions.
-      let accessToken: string | undefined;
-      try {
-        const { data } = await supabase.auth.getSession();
-        accessToken = data?.session?.access_token;
-      } catch {
-        /* no JWT session available */
-      }
-      const res = await fetch('/api/admin-repair-auth', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-        body: JSON.stringify({ id, token }),
-      });
-      const result = await res.json().catch(() => ({}));
-      if (res.ok && result.success) {
-        return {
-          success: true,
-          action: result.action,
-          temporaryPassword: result.temporaryPassword,
-        };
-      }
-      if (res.status === 404) {
-        return {
-          success: false,
-          error: 'Repair endpoint not deployed yet. Deploy api/admin-repair-auth.ts to Vercel.',
-        };
-      }
-      return { success: false, error: result.error || `Server returned ${res.status}` };
-    } catch (e) {
+    if (hit.status === 404) {
       return {
         success: false,
-        error: e instanceof Error ? e.message : 'Could not reach the repair endpoint',
+        error: 'Repair endpoint not deployed yet. Deploy api/admin-repair-auth.ts to Vercel.',
       };
     }
+    return {
+      success: false,
+      error:
+        hit.result?.error ||
+        hit.networkError ||
+        `The repair endpoint returned HTTP ${hit.status}. Check the Vercel function logs for /api/admin-repair-auth.`,
+    };
   },
 
   async updateUser(id: string, updates: { name?: string; department?: string; position?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'; password?: string }): Promise<{ success: boolean; error?: string }> {
