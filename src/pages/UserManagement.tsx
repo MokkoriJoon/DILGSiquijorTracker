@@ -41,14 +41,24 @@ export default function UserManagement() {
     return false;
   };
 
-  const handleDelete = async (id: string, name: string) => {
+  const handleDelete = async (target: any) => {
     setDeleteError('');
-    if (confirm(`Delete user "${name}"? This cannot be undone.`)) {
-      const result = await UserService.delete(id);
+    if (!canDeleteUser(target)) {
+      setDeleteError(
+        target.id === currentUser?.id
+          ? 'You cannot delete your own account.'
+          : 'Only Super Admins can delete other Super Admin accounts.'
+      );
+      return;
+    }
+    if (confirm(`Delete user "${formatName(target.name)}"? This cannot be undone.`)) {
+      const result = await UserService.delete(target.id);
       if (result && result.success === false) {
         setDeleteError(
           `Failed to delete user: ${result.error || 'Unknown error'}. ` +
-          'If this says row-level security blocked it, run FIX_USER_DELETE_PERMISSIONS.sql in the Supabase SQL Editor.'
+          'If this says row-level security blocked it, deploy api/admin-delete-user.ts ' +
+          '(with SUPABASE_SERVICE_ROLE_KEY set in Vercel) and run ' +
+          'FIX_USER_DELETE_PERMISSIONS.sql in the Supabase SQL Editor.'
         );
       }
       await loadUsers();
@@ -89,6 +99,12 @@ export default function UserManagement() {
           />
         </div>
       </div>
+
+      {deleteError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          {deleteError}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <table className="w-full">
@@ -155,9 +171,16 @@ export default function UserManagement() {
                       <Edit2 className="w-4 h-4 text-blue-600" />
                     </button>
                     <button
-                      onClick={() => handleDelete(user.id, formatName(user.name))}
-                      className="p-2 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Delete"
+                      onClick={() => handleDelete(user)}
+                      disabled={!canDeleteUser(user)}
+                      className="p-2 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                      title={
+                        !canDeleteUser(user)
+                          ? user.id === currentUser?.id
+                            ? 'You cannot delete your own account'
+                            : 'Only Super Admins can delete Super Admin accounts'
+                          : 'Delete'
+                      }
                     >
                       <Trash2 className="w-4 h-4 text-red-500" />
                     </button>
