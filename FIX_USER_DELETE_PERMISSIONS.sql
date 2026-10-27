@@ -33,11 +33,13 @@
 
 -- ------------------------------------------------------------
 -- A0) Portable email lookup on auth.users.
---     Older Supabase projects have auth.users.email; newer ones replaced it
---     with auth.users.raw_email (and a computed "email" view column).
---     This helper works on BOTH and never throws "column raw_email does not
---     exist", because the dynamic SQL is only executed when the column is
---     actually present in the catalog.
+--     Supabase renamed auth.users.email to auth.users.raw_email at some
+--     point, but MANY current projects still expose ONLY the physical
+--     "email" column (no raw_email). Hard-coding either name can throw
+--     `42703: column "raw_email" does not exist` depending on the project.
+--     This helper inspects the live catalog FIRST and only executes dynamic
+--     SQL for columns that actually exist, so it works on BOTH schemas and
+--     NEVER throws.
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.auth_user_email(p_uid uuid)
 RETURNS text
@@ -47,26 +49,42 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_email text;
+  v_cols   text[];
+  v_email  text;
 BEGIN
   IF p_uid IS NULL THEN
     RETURN NULL;
   END IF;
 
-  IF EXISTS (SELECT 1 FROM pg_attribute
-             WHERE attrelid = 'auth.users'::regclass
-               AND attname = 'raw_email'
-               AND NOT attisdropped) THEN
-    EXECUTE format('SELECT lower(raw_email) FROM auth.users WHERE id = %L', p_uid)
-      INTO v_email;
-  ELSIF EXISTS (SELECT 1 FROM pg_attribute
-                WHERE attrelid = 'auth.users'::regclass
-                  AND attname = 'email'
-                  AND NOT attisdropped) THEN
-    EXECUTE format('SELECT lower(email) FROM auth.users WHERE id = %L', p_uid)
-      INTO v_email;
-  ELSE
-    RETURN NULL;
+  -- Which email-ish columns does THIS project's auth.users actually have?
+  SELECT array_agg(attname)
+    INTO v_cols
+  FROM pg_attribute
+  WHERE attrelid = 'auth.users'::regclass
+    AND attname IN ('email', 'raw_email')
+    AND NOT attisdropped;
+
+  IF v_cols IS NULL OR array_length(v_cols, 1) IS NULL THEN
+    RETURN NULL;  -- no usable email column on this project
+  END IF;
+
+  -- Prefer raw_email when present (it preserves original casing), else email.
+  IF 'raw_email' = ANY (v_cols) THEN
+    BEGIN
+      EXECUTE 'SELECT lower(raw_email) FROM auth.users WHERE id = $1'
+        INTO v_email USING p_uid;
+    EXCEPTION WHEN undefined_column THEN
+      v_email := NULL;  -- defensive: catalog raced, fall through
+    END;
+  END IF;
+
+  IF v_email IS NULL AND 'email' = ANY (v_cols) THEN
+    BEGIN
+      EXECUTE 'SELECT lower(email) FROM auth.users WHERE id = $1'
+        INTO v_email USING p_uid;
+    EXCEPTION WHEN undefined_column THEN
+      v_email := NULL;
+    END;
   END IF;
 
   RETURN v_email;
@@ -218,7 +236,26 @@ REVOKE ALL ON FUNCTION public.get_service_token_hash() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.get_service_token_hash() TO authenticated;
 
 -- ------------------------------------------------------------
--- E) STORE THE TOKEN HASH (run this ONCE, replacing <...>):
+-- E1) READY-TO-RUN: stores sha256(SUPABASE_SERVICE_ROLE_KEY) for THIS
+--     project so api/admin-delete-user.ts, api/admin-repair-auth.ts and
+--     api/admin-create-auth-user.ts authorize immediately after deploy —
+--     no need to set VITE_SUPABASE_SERVICE_TOKEN or compute the hash by
+--     hand. Safe to re-run any time (upserts).
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.site_secrets (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+INSERT INTO public.site_secrets (key, value)
+VALUES ('admin_token_sha256',
+        'c84e803f879cc4dde676453849ad375abf902c0bb635ee1a2f20109e73001af1')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
+-- ------------------------------------------------------------
+-- E2) (Optional/manual alternative) If you ever rotate the service-role
+--     key, recompute its SHA-256 hash (terminal:
+--     printf '%s' 'your-service-key' | sha256sum) and update the row:
 --
 --    In Vercel you already set SUPABASE_SERVICE_ROLE_KEY. Compute its
 --    SHA-256 hash (e.g. in a terminal:  printf '%s' 'your-service-key' | sha256sum)
