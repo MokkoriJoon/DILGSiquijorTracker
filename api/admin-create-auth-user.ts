@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { sha256Hex, getServiceClient } from './_shared';
 
 export const config = {
   runtime: 'nodejs',
@@ -38,7 +38,27 @@ export default async function handler(req: any, res: any) {
   // Simple shared-secret check: client sends sha256(serviceKey) as a bearer-ish token.
   const providedToken = req.headers['x-profile-token'];
   const expectedToken = await sha256Hex(serviceKey);
-  if (!providedToken || providedToken !== expectedToken) {
+
+  const admin = getServiceClient()!;
+
+  // Also accept the hash stored in site_secrets (installed by
+  // FIX_USER_DELETE_PERMISSIONS.sql) so the token stays valid even if the
+  // service key is ever rotated while clients use the DB-provisioned hash.
+  let dbStoredHash: string | null = null;
+  try {
+    const { data: secretRow } = await admin
+      .from('site_secrets')
+      .select('value')
+      .eq('key', 'admin_token_sha256')
+      .maybeSingle();
+    dbStoredHash = secretRow?.value ?? null;
+  } catch {
+    /* table may not exist yet */
+  }
+
+  const authorized =
+    !!providedToken && (providedToken === expectedToken || providedToken === dbStoredHash);
+  if (!authorized) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -47,10 +67,6 @@ export default async function handler(req: any, res: any) {
     if (!id || !email || !password) {
       return res.status(400).json({ error: 'Missing id, email, or password' });
     }
-
-    const admin = createClient(url, serviceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
 
     // Look for an existing auth user by email
     const { data: existing } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -89,7 +105,3 @@ export default async function handler(req: any, res: any) {
   }
 }
 
-async function sha256Hex(input: string): Promise<string> {
-  const cryptoMod = await import('crypto');
-  return cryptoMod.createHash('sha256').update(input).digest('hex');
-}
