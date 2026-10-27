@@ -201,33 +201,26 @@ export default function PublicDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Hero Header */}
+      {/* Hero Header - Compact */}
       <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-14 h-14 bg-amber-500 rounded-xl flex items-center justify-center shadow-lg">
-                  <Building2 className="w-8 h-8 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-2xl lg:text-3xl font-bold">D.E.N.N.I.S.</h1>
-                  <p className="text-blue-200 text-sm">Digital Ecosystem for Navigation, Notifications, Information, and Schedules</p>
-                </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center shadow-lg">
+                <Building2 className="w-6 h-6 text-white" />
               </div>
-              <p className="text-blue-100 max-w-xl text-sm lg:text-base">
-                Real-time monitoring of departmental programs and upcoming tasks across DILG Siquijor Provincial Office and all Municipalities.
-              </p>
+              <div>
+                <h1 className="text-xl lg:text-2xl font-bold">D.E.N.N.I.S.</h1>
+                <p className="text-blue-200 text-xs">DILG Siquijor Task Tracker</p>
+              </div>
             </div>
-            <div className="flex gap-3">
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-white font-semibold rounded-lg transition-all shadow-lg"
-              >
-                <Shield className="w-4 h-4" />
-                Staff Login
-              </Link>
-            </div>
+            <Link
+              to="/login"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white font-semibold rounded-lg transition-all shadow-lg text-sm"
+            >
+              <Shield className="w-4 h-4" />
+              Staff Login
+            </Link>
           </div>
         </div>
       </div>
