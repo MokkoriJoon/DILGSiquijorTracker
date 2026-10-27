@@ -2,6 +2,38 @@ import { supabase } from '../lib/supabase';
 import type { TaskTemplate, TaskInstance, TaskStatus, RecurrenceType } from '../types';
 import { AuthService } from './auth';
 
+/**
+ * Turn a raw Supabase/Postgres error message into an actionable, user-friendly
+ * explanation. RLS failures for "old users" (no matching Supabase Auth account)
+ * otherwise surface as the cryptic "new row violates row-level security policy".
+ */
+export function explainDbError(message: string | undefined, code?: string): string {
+  const m = message || 'Unknown error';
+
+  if (m.includes('row-level security') || m.includes('permission denied') || code === '42501' || code === 'PGRST301') {
+    return (
+      'You do not have permission to save this (database security blocked it). ' +
+      'This usually means your account was created before Supabase Authentication was enabled, ' +
+      'so you have no real login session. Please log out and log in again (the app will repair ' +
+      'your account automatically), or ask a Super Admin to re-create your account in User Management.'
+    );
+  }
+
+  if (m.includes('invalid input syntax for type integer')) {
+    return 'Invalid date value was sent to the database. Please check the due date/day fields and try again.';
+  }
+
+  if (m.includes('duplicate key')) {
+    return 'This record already exists. Please try again.';
+  }
+
+  if (m.includes('violates foreign key constraint')) {
+    return 'The selected user or task no longer exists. Refresh the page and try again.';
+  }
+
+  return m;
+}
+
 // ============ HELPER FUNCTIONS ============
 
 /**
@@ -229,13 +261,13 @@ export const DatabaseService = {
           .single();
 
         if (retryError) {
-          return { template: null, error: retryError.message };
+          return { template: null, error: explainDbError(retryError.message, retryError.code) };
         }
 
         return { template: mapTemplate(retryResult) };
       }
       
-      return { template: null, error: error.message };
+      return { template: null, error: explainDbError(error.message, error.code) };
     }
     
     return { template: mapTemplate(data) };
@@ -485,7 +517,7 @@ export const DatabaseService = {
 
       if (error) {
         console.error('[DB] Error creating bookmark:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: explainDbError(error.message, error.code) };
       }
 
       return { success: true };
@@ -516,7 +548,7 @@ export const DatabaseService = {
 
       if (error) {
         console.error('[DB] Error updating bookmark:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: explainDbError(error.message, error.code) };
       }
 
       return { success: true };
@@ -650,6 +682,45 @@ export const DatabaseService = {
       .eq('id', id);
     
     return !error;
+  },
+
+  // ============ RLS DIAGNOSTICS ============
+
+  /**
+   * Returns a human-readable reason why the CURRENT session cannot write data,
+   * or null if everything looks good. Used to surface actionable errors instead
+   * of silent RLS failures for "old users" (users whose public.users row has no
+   * matching Supabase Auth account / session).
+   */
+  async diagnoseWriteAccess(userId: string): Promise<string | null> {
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+
+      if (!authUser) {
+        return 'You are not signed in with a Supabase Auth session. This account was created before authentication was enabled ("old user"), so the database blocks all writes. Please ask an admin to re-create your account from User Management, or run FIX_OLD_USERS_AUTH_RLS.sql and log in again.';
+      }
+
+      if (authUser.id !== userId) {
+        return `Your login id (${authUser.id}) does not match your user profile id (${userId}). Row-level security is blocking task/bookmark changes. An admin must align the two ids (re-create the user or run FIX_OLD_USERS_AUTH_RLS.sql).`;
+      }
+
+      // Verify the caller's own role row is readable (some old rows may be
+      // invisible to RLS policies on the users table).
+      const { error: probeError } = await supabase
+        .from('users')
+        .select('id, role')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      if (probeError) {
+        return `RLS is blocking access to your own user record: ${probeError.message}. Run FIX_ALL_ADMIN_PERMISSIONS.sql / FIX_TASK_TEMPLATES_RLS_COMPLETE.sql in the Supabase SQL Editor.`;
+      }
+
+      return null;
+    } catch (e) {
+      console.warn('[DB] diagnoseWriteAccess exception:', e);
+      return null;
+    }
   },
 
   // ============ USERS ============
@@ -788,7 +859,7 @@ export const DatabaseService = {
     
     if (error) {
       console.error('[DB] Error updating user:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: explainDbError(error.message, error.code) };
     }
 
     // Check if any rows were actually updated
