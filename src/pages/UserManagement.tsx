@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseService, UserService } from '../services/database';
+import { supabase } from '../services/supabaseClient';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Search, Shield, User, Edit2, Trash2, X, Key } from 'lucide-react';
+import { Plus, Search, Shield, User, Edit2, Trash2, X, Key, Wrench, RefreshCw } from 'lucide-react';
 import { DEPARTMENTS } from '../data/mockData';
 import { formatName, formatNameInput } from '../utils/format';
 
@@ -14,6 +15,10 @@ export default function UserManagement() {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<any>(null);
   const [deleteError, setDeleteError] = useState('');
+  // Map of userId -> true when a matching auth.users account exists.
+  const [authStatus, setAuthStatus] = useState<Record<string, boolean>>({});
+  const [repairingId, setRepairingId] = useState<string | null>(null);
+  const [repairMessage, setRepairMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -24,7 +29,82 @@ export default function UserManagement() {
     const data = await DatabaseService.getUsers();
     setUsers(data);
     setLoading(false);
+    checkAuthAccounts(data);
   }
+
+  /**
+   * Best-effort detection of legacy users ("No authentication logs"):
+   * ask the gated RPC public.get_auth_status() (installed by
+   * FIX_OLD_USERS_AUTH_RLS.sql / FIX_USER_DELETE_PERMISSIONS.sql) which
+   * profiles have a matching row in auth.users. If the RPC is not installed
+   * yet we simply show no badges — Repair Auth still works either way.
+   */
+  async function checkAuthAccounts(data: any[]) {
+    try {
+      const ids = data.map((u: any) => u.id).filter(Boolean);
+      if (ids.length === 0 || !supabase) return;
+      const { data: rows, error } = await supabase.rpc('get_auth_status', { user_ids: ids });
+      if (error || !rows) return;
+      const map: Record<string, boolean> = {};
+      (rows as any[]).forEach((r: any) => { map[r.id] = !!r.has_auth; });
+      setAuthStatus(map);
+    } catch {
+      /* RPC not installed — silently skip badges */
+    }
+  }
+
+  const canRepairUser = (target: any) => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'SUPER_ADMIN') return true;
+    if (currentUser.role === 'ADMIN') return target.role !== 'SUPER_ADMIN';
+    return false;
+  };
+
+  const handleRepairAuth = async (target: any) => {
+    setRepairMessage(null);
+    setDeleteError('');
+    if (!canRepairUser(target)) {
+      setRepairMessage({ type: 'error', text: 'Only Super Admins can repair other Super Admin accounts.' });
+      return;
+    }
+    if (!confirm(
+      `Repair Supabase Auth for "${formatName(target.name)}" (${target.email})?\n\n` +
+      'This does NOT delete the account or any of its tasks/bookmarks. It creates/fixes ' +
+      'the hidden auth record using the SAME email and current password, so the user keeps ' +
+      'their login and will be able to add/assign tasks and save bookmarks again after their next sign-in.'
+    )) {
+      return;
+    }
+    setRepairingId(target.id);
+    const result = await UserService.repairAuth(target.id);
+    setRepairingId(null);
+    if (result.success) {
+      const actionText =
+        result.action === 'created' ? 'Auth account created' :
+        result.action === 'rekeyed' ? 'Auth account re-linked to the profile id' :
+        'Auth account synced';
+      // The user's login (email + current password) is unchanged — the server
+      // reused the stored password. They just need to sign out and back in
+      // once so a real Supabase JWT session starts and RLS passes.
+      setRepairMessage({
+        type: 'success',
+        text:
+          `${actionText} for ${formatName(target.name)}. Their login (email + current password) is unchanged — ` +
+          'they should log out and log back in once so a real Supabase session starts. ' +
+          (result.temporaryPassword
+            ? `No stored password was found, so a temporary one was set: ${result.temporaryPassword}`
+            : ''),
+      });
+      setAuthStatus(prev => ({ ...prev, [target.id]: true }));
+    } else {
+      setRepairMessage({
+        type: 'error',
+        text:
+          `Could not repair ${formatName(target.name)}: ${result.error || 'Unknown error'}. ` +
+          'Make sure api/admin-repair-auth.ts is deployed with SUPABASE_SERVICE_ROLE_KEY set.',
+      });
+    }
+  };
 
   const filteredUsers = users.filter(u =>
     u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -54,12 +134,9 @@ export default function UserManagement() {
     if (confirm(`Delete user "${formatName(target.name)}"? This cannot be undone.`)) {
       const result = await UserService.delete(target.id);
       if (result && result.success === false) {
-        setDeleteError(
-          `Failed to delete user: ${result.error || 'Unknown error'}. ` +
-          'If this says row-level security blocked it, deploy api/admin-delete-user.ts ' +
-          '(with SUPABASE_SERVICE_ROLE_KEY set in Vercel) and run ' +
-          'FIX_USER_DELETE_PERMISSIONS.sql in the Supabase SQL Editor.'
-        );
+        // The server-side endpoint returns precise, actionable errors now —
+        // show them as-is instead of a generic RLS message.
+        setDeleteError(`Failed to delete user: ${result.error || 'Unknown error'}`);
       }
       await loadUsers();
     }
@@ -106,6 +183,25 @@ export default function UserManagement() {
         </div>
       )}
 
+      {repairMessage && (
+        <div className={`p-3 border rounded-lg text-sm ${
+          repairMessage.type === 'success'
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+            : 'bg-red-50 border-red-200 text-red-700'
+        }`}>
+          <div className="flex items-start justify-between gap-3">
+            <span>{repairMessage.text}</span>
+            <button
+              onClick={() => setRepairMessage(null)}
+              className="p-0.5 hover:bg-black/5 rounded shrink-0"
+              title="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <table className="w-full">
           <thead>
@@ -127,7 +223,18 @@ export default function UserManagement() {
                       <span className="text-sm font-bold text-white">{formatName(user.name).charAt(0)}</span>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-800">{formatName(user.name)}</p>
+                      <p className="text-sm font-medium text-slate-800">
+                        {formatName(user.name)}
+                        {authStatus[user.id] === false && (
+                          <span
+                            className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-700 align-middle"
+                            title="No Supabase Auth account for this user — they cannot save tasks or bookmarks until repaired."
+                          >
+                            <Wrench className="w-3 h-3" />
+                            No Auth
+                          </span>
+                        )}
+                      </p>
                       <p className="text-xs text-slate-500">{user.email}</p>
                     </div>
                   </div>
@@ -156,6 +263,28 @@ export default function UserManagement() {
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => handleRepairAuth(user)}
+                      disabled={!canRepairUser(user) || repairingId === user.id}
+                      className={`p-2 rounded-lg transition-colors disabled:opacity-30 ${
+                        authStatus[user.id] === false
+                          ? 'bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-300'
+                          : 'hover:bg-emerald-50'
+                      }`}
+                      title={
+                        !canRepairUser(user)
+                          ? 'Only Super Admins can repair Super Admin accounts'
+                          : authStatus[user.id] === false
+                            ? 'Repair Supabase Auth (keep same login) — fixes missing auth/logs so this user can add tasks & bookmarks'
+                            : 'Refresh / re-sync Supabase Auth for this account (same login, no data deleted)'
+                      }
+                    >
+                      {repairingId === user.id ? (
+                        <RefreshCw className="w-4 h-4 text-emerald-600 animate-spin" />
+                      ) : (
+                        <Wrench className="w-4 h-4 text-emerald-600" />
+                      )}
+                    </button>
                     <button
                       onClick={() => setResetPasswordUser(user)}
                       className="p-2 hover:bg-amber-50 rounded-lg transition-colors"

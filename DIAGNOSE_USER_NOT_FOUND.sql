@@ -68,7 +68,7 @@ WHERE id = auth.uid();
 /*
 UPDATE public.users
 SET id = auth.uid()
-WHERE email = (SELECT email FROM auth.users WHERE id = auth.uid());
+WHERE lower(email) = coalesce(public.auth_user_email(auth.uid()), '');
 */
 
 -- OPTION C: If you want to create a fresh ADMIN user
@@ -79,8 +79,8 @@ DELETE FROM public.users WHERE email = 'your-email@example.com';
 INSERT INTO public.users (id, email, name, role, department, created_at)
 VALUES (
   auth.uid(),
-  (SELECT email FROM auth.users WHERE id = auth.uid()),
-  (SELECT COALESCE(raw_user_meta_data->>'full_name', split_part(email, '@', 1)) FROM auth.users WHERE id = auth.uid()),
+  coalesce(public.auth_user_email(auth.uid()), ''),
+  COALESCE(split_part(public.auth_user_email(auth.uid()), '@', 1), 'admin'),
   'SUPER_ADMIN',
   'DILG Siquijor Provincial Office',
   NOW()

@@ -31,6 +31,72 @@
 -- ============================================================
 
 -- ------------------------------------------------------------
+-- 0) Portable email lookup on auth.users.
+--    Supabase renamed auth.users.email to auth.users.raw_email at some
+--    point, but — contrary to what earlier revisions of this script assumed
+--    — MANY current projects still expose ONLY the physical "email" column
+--    (no raw_email at all). A hard-coded reference to either name can throw
+--    `42703: column "raw_email" does not exist` (or the reverse) depending
+--    on the project.
+--
+--    This helper resolves the email by inspecting the live catalog FIRST and
+--    only executing dynamic SQL for columns that actually exist, so it works
+--    on BOTH schemas and NEVER throws. It also tolerates the rare case where
+--    both columns exist.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.auth_user_email(p_uid uuid)
+RETURNS text
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_cols   text[];
+  v_email  text;
+BEGIN
+  IF p_uid IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  -- Which email-ish columns does THIS project's auth.users actually have?
+  SELECT array_agg(attname)
+    INTO v_cols
+  FROM pg_attribute
+  WHERE attrelid = 'auth.users'::regclass
+    AND attname IN ('email', 'raw_email')
+    AND NOT attisdropped;
+
+  IF v_cols IS NULL OR array_length(v_cols, 1) IS NULL THEN
+    RETURN NULL;  -- no usable email column on this project
+  END IF;
+
+  -- Prefer raw_email when present (it preserves original casing), else email.
+  IF 'raw_email' = ANY (v_cols) THEN
+    BEGIN
+      EXECUTE 'SELECT lower(raw_email) FROM auth.users WHERE id = $1'
+        INTO v_email USING p_uid;
+    EXCEPTION WHEN undefined_column THEN
+      v_email := NULL;  -- defensive: catalog raced, fall through
+    END;
+  END IF;
+
+  IF v_email IS NULL AND 'email' = ANY (v_cols) THEN
+    BEGIN
+      EXECUTE 'SELECT lower(email) FROM auth.users WHERE id = $1'
+        INTO v_email USING p_uid;
+    EXCEPTION WHEN undefined_column THEN
+      v_email := NULL;
+    END;
+  END IF;
+
+  RETURN v_email;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.auth_user_email(uuid) TO authenticated;
+
+-- ------------------------------------------------------------
 -- 1) Helper: current user's role (by auth uid, falling back to email)
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.get_current_user_role()
@@ -45,10 +111,7 @@ AS $$
   WHERE u.id = (SELECT auth.uid())
      OR (
        u.email IS NOT NULL
-       AND lower(u.email) = lower(coalesce(
-             (SELECT raw_email FROM auth.users WHERE id = (SELECT auth.uid())),
-             ''
-           ))
+       AND lower(u.email) = coalesce(public.auth_user_email((SELECT auth.uid())), '')
        AND (SELECT auth.uid()) IS NOT NULL
      )
   LIMIT 1;
@@ -171,7 +234,7 @@ USING (
   OR user_id IN (
     SELECT u.id FROM public.users u
     WHERE (SELECT auth.uid()) IS NOT NULL
-      AND lower(u.email) = lower((SELECT email FROM auth.users WHERE id = (SELECT auth.uid())))
+      AND lower(u.email) = coalesce(public.auth_user_email((SELECT auth.uid())), '')
   )
 );
 
@@ -182,7 +245,7 @@ WITH CHECK (
   OR user_id IN (
     SELECT u.id FROM public.users u
     WHERE (SELECT auth.uid()) IS NOT NULL
-      AND lower(u.email) = lower((SELECT email FROM auth.users WHERE id = (SELECT auth.uid())))
+      AND lower(u.email) = coalesce(public.auth_user_email((SELECT auth.uid())), '')
   )
 );
 
@@ -193,7 +256,7 @@ USING (
   OR user_id IN (
     SELECT u.id FROM public.users u
     WHERE (SELECT auth.uid()) IS NOT NULL
-      AND lower(u.email) = lower((SELECT email FROM auth.users WHERE id = (SELECT auth.uid())))
+      AND lower(u.email) = coalesce(public.auth_user_email((SELECT auth.uid())), '')
   )
 )
 WITH CHECK (
@@ -201,7 +264,7 @@ WITH CHECK (
   OR user_id IN (
     SELECT u.id FROM public.users u
     WHERE (SELECT auth.uid()) IS NOT NULL
-      AND lower(u.email) = lower((SELECT email FROM auth.users WHERE id = (SELECT auth.uid())))
+      AND lower(u.email) = coalesce(public.auth_user_email((SELECT auth.uid())), '')
   )
 );
 
@@ -212,7 +275,7 @@ USING (
   OR user_id IN (
     SELECT u.id FROM public.users u
     WHERE (SELECT auth.uid()) IS NOT NULL
-      AND lower(u.email) = lower((SELECT email FROM auth.users WHERE id = (SELECT auth.uid())))
+      AND lower(u.email) = coalesce(public.auth_user_email((SELECT auth.uid())), '')
   )
 );
 
@@ -222,5 +285,33 @@ USING (
 SELECT u.id, u.email, u.name, u.role,
        CASE WHEN au.id IS NULL THEN 'MISSING AUTH ACCOUNT' ELSE 'ok' END AS auth_status
 FROM public.users u
-LEFT JOIN auth.users au ON au.id = u.id OR lower(au.email) = lower(u.email)
+LEFT JOIN auth.users au ON au.id = u.id OR public.auth_user_email(au.id) = lower(u.email)
 ORDER BY auth_status DESC, u.created_at;
+
+-- ------------------------------------------------------------
+-- 6) get_auth_status(user_ids) — powers the "No Auth" badge and the
+--    Repair Auth button in the Super Admin panel (UserManagement.tsx).
+--    SECURITY DEFINER so it may read auth.users; gated to ADMIN/SUPER_ADMIN.
+--    Returns one row per id: { id, has_auth }.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.get_auth_status(user_ids uuid[])
+RETURNS TABLE(id uuid, has_auth boolean)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    u.id,
+    EXISTS (
+      SELECT 1 FROM auth.users au
+      WHERE au.id = u.id
+         OR public.auth_user_email(au.id) = lower(u.email)
+    ) AS has_auth
+  FROM public.users u
+  WHERE u.id = ANY (user_ids)
+    AND public.get_current_user_role() IN ('SUPER_ADMIN', 'ADMIN');
+$$;
+
+REVOKE ALL ON FUNCTION public.get_auth_status(uuid[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_auth_status(uuid[]) TO authenticated;
