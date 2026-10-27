@@ -85,35 +85,62 @@ BEGIN
    WHERE c.table_schema = 'auth' AND c.table_name = 'users';
 
   -- Assemble the INSERT with parallel arrays of column names + value
-  -- expressions so commas are always placed correctly.
-  v_cnames := ARRAY['id','instance_id','aud','role','email','encrypted_password',
-                    'email_confirmed_at','raw_app_meta_data','raw_user_meta_data',
-                    'created_at','updated_at'];
+  -- expressions so commas are always placed correctly. Every optional
+  -- column is added ONLY if it actually exists in this project's auth.users
+  -- (GoTrue schema versions differ — e.g. older/newer projects may lack
+  -- instance_id, confirmation_token, authentication_methods, ...).
+  -- Core columns. Even these are filtered below, because very old / custom
+  -- auth schemas may lack e.g. updated_at or raw_app_meta_data.
+  v_cnames := ARRAY['id','email','encrypted_password','email_confirmed_at'];
   v_cvals  := ARRAY[
       quote_literal(v_uid::text) || '::uuid',
-      '''00000000-0000-0000-0000-000000000000''::uuid',
-      '''authenticated''',
-      '''authenticated''',
       quote_literal(v_email),
       quote_literal(v_hash),
-      'now()',
-      '''{"provider":"email","providers":["email"]}''::jsonb',
-      quote_literal((jsonb_build_object('full_name', v_name, 'department', v_dept, 'role', 'SUPER_ADMIN'))::text) || '::jsonb',
-      'now()',
       'now()'];
 
+  IF 'aud' = ANY(v_cols) THEN
+    v_cnames := v_cnames || ARRAY['aud']; v_cvals := v_cvals || ARRAY['''authenticated'''];
+  END IF;
+  IF 'role' = ANY(v_cols) THEN
+    v_cnames := v_cnames || ARRAY['role']; v_cvals := v_cvals || ARRAY['''authenticated'''];
+  END IF;
+  IF 'raw_app_meta_data' = ANY(v_cols) THEN
+    v_cnames := v_cnames || ARRAY['raw_app_meta_data'];
+    v_cvals  := v_cvals  || ARRAY['''{"provider":"email","providers":["email"]}''::jsonb'];
+  END IF;
+  IF 'raw_user_meta_data' = ANY(v_cols) THEN
+    v_cnames := v_cnames || ARRAY['raw_user_meta_data'];
+    v_cvals  := v_cvals  || ARRAY[quote_literal((jsonb_build_object('full_name', v_name, 'department', v_dept, 'role', 'SUPER_ADMIN'))::text) || '::jsonb'];
+  END IF;
+  IF 'created_at' = ANY(v_cols) THEN
+    v_cnames := v_cnames || ARRAY['created_at']; v_cvals := v_cvals || ARRAY['now()'];
+  END IF;
+  IF 'updated_at' = ANY(v_cols) THEN
+    v_cnames := v_cnames || ARRAY['updated_at']; v_cvals := v_cvals || ARRAY['now()'];
+  END IF;
+  IF 'instance_id' = ANY(v_cols) THEN
+    v_cnames := v_cnames || ARRAY['instance_id'];
+    v_cvals  := v_cvals  || ARRAY['''00000000-0000-0000-0000-000000000000''::uuid'];
+  END IF;
   IF 'confirmation_token' = ANY(v_cols) THEN
     v_cnames := v_cnames || ARRAY['confirmation_token']; v_cvals := v_cvals || ARRAY[quote_literal('')];
+  END IF;
+  IF 'confirmation_sent_at' = ANY(v_cols) THEN
+    -- keep GoTrue from ever sending a confirmation email for this account
+    v_cnames := v_cnames || ARRAY['confirmation_sent_at']; v_cvals := v_cvals || ARRAY['now()'];
   END IF;
   IF 'recovery_token' = ANY(v_cols) THEN
     v_cnames := v_cnames || ARRAY['recovery_token']; v_cvals := v_cvals || ARRAY[quote_literal('')];
   END IF;
-  IF 'authentication_methods' = ANY(v_cols) THEN
-    v_cnames := v_cnames || ARRAY['authentication_methods'];
-    v_cvals  := v_cvals  || ARRAY['''[{"provider":"password","method":"password"}]''::jsonb'];
+  IF 'email_change' = ANY(v_cols) THEN
+    v_cnames := v_cnames || ARRAY['email_change']; v_cvals := v_cvals || ARRAY['NULL'];
   END IF;
   IF 'is_sso_user' = ANY(v_cols) THEN
     v_cnames := v_cnames || ARRAY['is_sso_user']; v_cvals := v_cvals || ARRAY['false'];
+  END IF;
+  IF 'authentication_methods' = ANY(v_cols) THEN
+    v_cnames := v_cnames || ARRAY['authentication_methods'];
+    v_cvals  := v_cvals  || ARRAY['''[{"provider":"password","method":"password"}]''::jsonb'];
   END IF;
 
     v_sql := 'INSERT INTO auth.users (' || array_to_string(v_cnames, ', ') || ') VALUES ('
