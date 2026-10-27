@@ -1,12 +1,16 @@
 -- DILG Tracker Database Migration
 -- Run this on your PostgreSQL/Supabase instance
+-- Made fully idempotent (safe to run multiple times)
 
--- Enums
+-- ==========================================
+-- 1. ENUMS (Safe to run multiple times)
+-- ==========================================
 DO $$ BEGIN
   CREATE TYPE "Role" AS ENUM ('ADMIN', 'STANDARD');
 EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
+
 DO $$ BEGIN
   CREATE TYPE "TaskStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'SUBMITTED', 'COMPLETED', 'OVERDUE');
 EXCEPTION
@@ -25,8 +29,10 @@ EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
 
--- Users table
-CREATE TABLE "users" (
+-- ==========================================
+-- 2. TABLES (Added IF NOT EXISTS)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS "users" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "email" VARCHAR(255) UNIQUE NOT NULL,
   "name" VARCHAR(255) NOT NULL,
@@ -37,8 +43,7 @@ CREATE TABLE "users" (
   "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Task Templates
-CREATE TABLE "task_templates" (
+CREATE TABLE IF NOT EXISTS "task_templates" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "title" VARCHAR(500) NOT NULL,
   "description" TEXT,
@@ -52,8 +57,7 @@ CREATE TABLE "task_templates" (
   "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Task Instances
-CREATE TABLE "task_instances" (
+CREATE TABLE IF NOT EXISTS "task_instances" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "template_id" UUID NOT NULL REFERENCES "task_templates"("id") ON DELETE CASCADE,
   "due_date" DATE NOT NULL,
@@ -64,20 +68,14 @@ CREATE TABLE "task_instances" (
   "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX "idx_task_instances_template" ON "task_instances"("template_id");
-CREATE INDEX "idx_task_instances_due_date" ON "task_instances"("due_date");
-CREATE INDEX "idx_task_instances_status" ON "task_instances"("status");
-
--- Task Assignments
-CREATE TABLE "task_assignments" (
+CREATE TABLE IF NOT EXISTS "task_assignments" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "instance_id" UUID NOT NULL REFERENCES "task_instances"("id") ON DELETE CASCADE,
   "user_id" UUID NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
   UNIQUE("instance_id", "user_id")
 );
 
--- Notifications
-CREATE TABLE "notifications" (
+CREATE TABLE IF NOT EXISTS "notifications" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "type" VARCHAR(50) NOT NULL,
   "title" VARCHAR(255) NOT NULL,
@@ -88,11 +86,7 @@ CREATE TABLE "notifications" (
   "created_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX "idx_notifications_user" ON "notifications"("user_id");
-CREATE INDEX "idx_notifications_read" ON "notifications"("read");
-
--- Uploaded Files
-CREATE TABLE "uploaded_files" (
+CREATE TABLE IF NOT EXISTS "uploaded_files" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "name" VARCHAR(500) NOT NULL,
   "type" VARCHAR(100) NOT NULL,
@@ -104,10 +98,7 @@ CREATE TABLE "uploaded_files" (
   "created_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX "idx_uploaded_files_task" ON "uploaded_files"("task_id");
-
--- Scheduler Logs
-CREATE TABLE "scheduler_logs" (
+CREATE TABLE IF NOT EXISTS "scheduler_logs" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "run_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   "generated" INTEGER NOT NULL DEFAULT 0,
@@ -116,8 +107,7 @@ CREATE TABLE "scheduler_logs" (
   "duration_ms" INTEGER NOT NULL DEFAULT 0
 );
 
--- Email Configuration
-CREATE TABLE "email_config" (
+CREATE TABLE IF NOT EXISTS "email_config" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "enabled" BOOLEAN NOT NULL DEFAULT false,
   "reminder_days" INTEGER NOT NULL DEFAULT 3,
@@ -127,14 +117,33 @@ CREATE TABLE "email_config" (
   "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Insert default email config
-INSERT INTO "email_config" DEFAULT VALUES;
+-- ==========================================
+-- 3. INDEXES (Added IF NOT EXISTS)
+-- ==========================================
+CREATE INDEX IF NOT EXISTS "idx_task_instances_template" ON "task_instances"("template_id");
+CREATE INDEX IF NOT EXISTS "idx_task_instances_due_date" ON "task_instances"("due_date");
+CREATE INDEX IF NOT EXISTS "idx_task_instances_status" ON "task_instances"("status");
+CREATE INDEX IF NOT EXISTS "idx_notifications_user" ON "notifications"("user_id");
+CREATE INDEX IF NOT EXISTS "idx_notifications_read" ON "notifications"("read");
+CREATE INDEX IF NOT EXISTS "idx_uploaded_files_task" ON "uploaded_files"("task_id");
 
--- Seed admin user (password: admin123 - hash this in production!)
+-- ==========================================
+-- 4. SEED DATA (Made Idempotent)
+-- ==========================================
+-- Insert default email config ONLY if the table is empty
+INSERT INTO "email_config" ("enabled", "reminder_days", "overdue_alert", "completion_alert", "daily_digest")
+SELECT false, 3, true, true, false
+WHERE NOT EXISTS (SELECT 1 FROM "email_config");
+
+-- Seed admin user (Ignores if email already exists)
 INSERT INTO "users" ("email", "name", "password", "role", "department")
-VALUES ('admin@dilg.gov.ph', 'Maria Santos', '$2b$10$placeholder_hash', 'ADMIN', 'Central Office');
+VALUES ('admin@dilg.gov.ph', 'Maria Santos', '$2b$10$placeholder_hash', 'ADMIN', 'Central Office')
+ON CONFLICT ("email") DO NOTHING;
 
--- RLS Policies for Supabase
+-- ==========================================
+-- 5. ROW LEVEL SECURITY (RLS)
+-- ==========================================
+-- ENABLE RLS is already idempotent in PostgreSQL
 ALTER TABLE "users" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "task_templates" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "task_instances" ENABLE ROW LEVEL SECURITY;
@@ -142,25 +151,22 @@ ALTER TABLE "task_assignments" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "notifications" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "uploaded_files" ENABLE ROW LEVEL SECURITY;
 
--- Users: admins can see all, standard users can see themselves
-CREATE POLICY "Users can view all" ON "users" FOR SELECT USING (true);
-CREATE POLICY "Admins can manage users" ON "users" FOR ALL USING (
+-- Policies (Added IF NOT EXISTS for PostgreSQL 15+)
+CREATE POLICY IF NOT EXISTS "Users can view all" ON "users" FOR SELECT USING (true);
+CREATE POLICY IF NOT EXISTS "Admins can manage users" ON "users" FOR ALL USING (
   EXISTS (SELECT 1 FROM "users" WHERE "id" = auth.uid() AND "role" = 'ADMIN')
 );
 
--- Templates: everyone can read, only admins can write
-CREATE POLICY "Anyone can view templates" ON "task_templates" FOR SELECT USING (true);
-CREATE POLICY "Admins can manage templates" ON "task_templates" FOR ALL USING (
+CREATE POLICY IF NOT EXISTS "Anyone can view templates" ON "task_templates" FOR SELECT USING (true);
+CREATE POLICY IF NOT EXISTS "Admins can manage templates" ON "task_templates" FOR ALL USING (
   EXISTS (SELECT 1 FROM "users" WHERE "id" = auth.uid() AND "role" = 'ADMIN')
 );
 
--- Instances: users can see their own, admins can see all
-CREATE POLICY "Users see assigned instances" ON "task_instances" FOR SELECT USING (
+CREATE POLICY IF NOT EXISTS "Users see assigned instances" ON "task_instances" FOR SELECT USING (
   EXISTS (SELECT 1 FROM "task_assignments" WHERE "instance_id" = "task_instances"."id" AND "user_id" = auth.uid())
   OR EXISTS (SELECT 1 FROM "users" WHERE "id" = auth.uid() AND "role" = 'ADMIN')
 );
 
--- Notifications: users see their own
-CREATE POLICY "Users see own notifications" ON "notifications" FOR SELECT USING (
+CREATE POLICY IF NOT EXISTS "Users see own notifications" ON "notifications" FOR SELECT USING (
   "user_id" = auth.uid() OR "user_id" IS NULL
 );
