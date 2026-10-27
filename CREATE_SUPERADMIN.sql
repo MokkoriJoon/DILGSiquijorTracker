@@ -52,6 +52,8 @@ DECLARE
   v_cnames   text[];
   v_cvals    text[];
   v_sql      text;
+  v_setlist  text;
+  v_has_updated boolean;
 BEGIN
   -- ---------------------------------------------------------------------------
   -- 1. Reuse an existing uuid when possible (auth row first, then stale
@@ -124,10 +126,16 @@ BEGIN
 
   -- ---------------------------------------------------------------------------
   -- 4. Upsert the public.users profile with the SAME uuid (RLS requires this).
-  --    Optional columns added by later migrations (position, visible) are
-  --    included only when they exist.
+  --    The column list is built dynamically from information_schema so this
+  --    works whether or not later migrations added optional columns
+  --    (updated_at, position, visible, avatar_url, phone, ...).
   -- ---------------------------------------------------------------------------
-  v_cnames := ARRAY['id','email','name','password','role','department','created_at','updated_at'];
+  SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema='public' AND table_name='users'
+                   AND column_name='updated_at')
+    INTO v_has_updated;
+
+  v_cnames := ARRAY['id','email','name','password','role','department','created_at'];
   v_cvals  := ARRAY[
       quote_literal(v_uid::text) || '::uuid',
       quote_literal(v_email),
@@ -135,11 +143,14 @@ BEGIN
       quote_literal(v_plain_pw),
       '''SUPER_ADMIN''',
       quote_literal(v_dept),
-      'now()', 'now()'];
+      'now()'];
 
+  IF v_has_updated THEN
+    v_cnames := v_cnames || ARRAY['updated_at'];
+    v_cvals  := v_cvals  || ARRAY['now()'];
+  END IF;
   IF EXISTS (SELECT 1 FROM information_schema.columns
              WHERE table_schema='public' AND table_name='users' AND column_name='position') THEN
-    -- insert position right after department for readability (order is irrelevant)
     v_cnames := v_cnames || ARRAY['position'];
     v_cvals  := v_cvals  || ARRAY['''Provincial Administrator'''];
   END IF;
@@ -149,11 +160,14 @@ BEGIN
     v_cvals  := v_cvals  || ARRAY['true'];
   END IF;
 
+  -- ON CONFLICT update list: only touch columns that actually exist.
+  v_setlist := 'email = EXCLUDED.email, name = EXCLUDED.name, password = EXCLUDED.password,'
+            || ' role = ''SUPER_ADMIN'''
+            || CASE WHEN v_has_updated THEN ', updated_at = now()' ELSE '' END;
+
   v_sql := 'INSERT INTO public.users (' || array_to_string(v_cnames, ', ') || ') VALUES ('
         || array_to_string(v_cvals, ', ') || ')'
-        || ' ON CONFLICT (id) DO UPDATE SET '
-        || '  email = EXCLUDED.email, name = EXCLUDED.name, password = EXCLUDED.password,'
-        || '  role = ''SUPER_ADMIN'', updated_at = now()';
+        || ' ON CONFLICT (id) DO UPDATE SET ' || v_setlist;
 
   BEGIN
     EXECUTE v_sql;
@@ -170,3 +184,11 @@ SELECT u.id, u.email, u.name, u.role,
 FROM public.users u
 LEFT JOIN auth.users au ON au.id = u.id
 WHERE lower(u.email) = 'calibojunfranz@gmail.com';
+
+-- OPTIONAL (only if you WANT the updated_at column): your public.users table
+-- currently has no "updated_at" column. The script above already adapts to
+-- that and will succeed as-is. If you'd rather add the column for future
+-- compatibility, uncomment these two lines and run them BEFORE re-running the
+-- script:
+-- ALTER TABLE public.users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+-- UPDATE public.users SET updated_at = now() WHERE updated_at IS NULL;
