@@ -2,7 +2,11 @@
 -- Run this on your PostgreSQL/Supabase instance
 
 -- Enums
-CREATE TYPE "Role" AS ENUM ('ADMIN', 'STANDARD');
+DO $$ BEGIN
+  CREATE TYPE "Role" AS ENUM ('ADMIN', 'STANDARD');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 CREATE TYPE "TaskStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'SUBMITTED', 'COMPLETED', 'OVERDUE');
 CREATE TYPE "RecurrenceType" AS ENUM ('ONCE', 'DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY');
 CREATE TYPE "Priority" AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL');
