@@ -784,9 +784,79 @@ export const DatabaseService = {
     return { success: true };
   },
 
+  /**
+   * SHA-256 hex of the Supabase service role key, used as the shared-secret
+   * token for server-side admin endpoints (/api/admin-delete-user).
+   * Resolution order:
+   *   1. VITE_SUPABASE_SERVICE_TOKEN build-time env var (precomputed hash).
+   *   2. The gated Postgres RPC public.get_service_token_hash() (installed by
+   *      FIX_USER_DELETE_PERMISSIONS.sql) — callable only with the anon key;
+   *      the DB itself refuses to return it unless the caller's session maps
+   *      to an ADMIN/SUPER_ADMIN row in public.users. Fetched once and cached.
+   */
+  async getAdminToken(): Promise<string | null> {
+    const precomputed = (import.meta as any).env?.VITE_SUPABASE_SERVICE_TOKEN;
+    if (precomputed) return String(precomputed);
+
+    if (!(DatabaseService as any)._adminTokenPromise) {
+      (DatabaseService as any)._adminTokenPromise = (async () => {
+        try {
+          const { data, error } = await supabase.rpc('get_service_token_hash');
+          if (error || !data) {
+            console.warn('[DB] get_service_token_hash unavailable:', error?.message);
+            return null;
+          }
+          return String(data);
+        } catch (e) {
+          console.warn('[DB] Could not fetch admin token:', e);
+          return null;
+        }
+      })();
+    }
+    return (DatabaseService as any)._adminTokenPromise;
+  },
+
   async deleteUser(id: string): Promise<{ success: boolean; error?: string }> {
-    // 1) Delete the profile row from the users table (RLS must allow
-    //    SUPER_ADMIN/ADMIN to delete other users - see FIX_USER_DELETE_PERMISSIONS.sql).
+    // Deleting another user (especially one whose profile has no matching
+    // auth.uid()) cannot be done through RLS with the anon key, and removing
+    // the Supabase Auth account requires the service role. Both are handled
+    // server-side by /api/admin-delete-user (see api/admin-delete-user.ts).
+    const token = await this.getAdminToken();
+    if (token) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/admin-delete-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ id, token }),
+        });
+        const result = await res.json().catch(() => ({}));
+        if (res.ok && result.success) {
+          return { success: true };
+        }
+        if (res.status === 404) {
+          // Endpoint not deployed yet - fall back to the client-side path below.
+          console.warn('[DB] /api/admin-delete-user not found; falling back to direct delete.');
+        } else {
+          console.error('[DB] Admin delete endpoint failed:', result);
+          return {
+            success: false,
+            error: result.error || `Server returned ${res.status}`,
+          };
+        }
+      } catch (e) {
+        console.warn('[DB] Admin delete endpoint unreachable; falling back to direct delete.', e);
+      }
+    } else {
+      console.warn('[DB] No admin token available; trying direct delete (may be blocked by RLS).');
+    }
+
+    // Fallback: direct deletes with the anon key (works only if the RLS
+    // policies from FIX_USER_DELETE_PERMISSIONS.sql are installed).
+    // 1) Delete the profile row from the users table.
     const { error: userError } = await supabase
       .from('users')
       .delete()
@@ -795,6 +865,22 @@ export const DatabaseService = {
     if (userError) {
       console.error('[DB] Error deleting user:', userError);
       return { success: false, error: userError.message };
+    }
+
+    // No rows actually removed? RLS silently filtered the DELETE.
+    const { data: stillThere, error: checkError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+    if (!checkError && stillThere) {
+      return {
+        success: false,
+        error:
+          'Row-level security blocked the delete (the user is still in the database). ' +
+          'Deploy api/admin-delete-user.ts with SUPABASE_SERVICE_ROLE_KEY set, and run ' +
+          'FIX_USER_DELETE_PERMISSIONS.sql in the Supabase SQL Editor.',
+      };
     }
 
     // 2) Clean up related data so nothing is left dangling.
@@ -825,9 +911,8 @@ export const DatabaseService = {
     if (bmError) console.warn('[DB] Could not clean bookmarks for deleted user:', bmError.message);
 
     // 3) Also try to remove the Supabase Auth account so the email can be
-    //    reused. This requires the "Delete Users" admin API to be reachable
-    //    with the anon key (Dashboard -> Authentication -> Providers/API settings)
-    //    or a service-role based edge function. Failure here is non-fatal.
+    //    reused. Requires the service role, so this usually fails from the
+    //    browser; failure here is non-fatal.
     try {
       const { error: authError } = await supabase.auth.admin.deleteUser(id);
       if (authError) {
