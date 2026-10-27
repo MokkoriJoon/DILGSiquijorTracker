@@ -5,14 +5,21 @@ import { AuthService } from './auth';
 // ============ HELPER FUNCTIONS ============
 
 /**
- * Convert a local "YYYY-MM-DD" date string into a proper UTC ISO timestamp.
- * IMPORTANT: new Date('YYYY-MM-DD') is parsed as UTC midnight, which shifts the
- * day backwards for users east of UTC (e.g. Philippines UTC+8). Building the date
- * with the local-time constructor keeps the exact calendar day the user picked.
+ * Normalize any date representation coming from the app or the database into a
+ * plain "YYYY-MM-DD" calendar-day string suitable for a Postgres DATE column.
+ * Accepts "YYYY-MM-DD", full ISO timestamps like "2026-10-30T00:00:00.000Z",
+ * and Date objects. This prevents errors such as:
+ *   invalid input syntax for type integer: "2026-10-30T00:00:00.000Z"
  */
-function toUTCDateInput(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  return new Date(Date.UTC(year, (month || 1) - 1, day || 1)).toISOString();
+function toDateOnly(value: string | Date | null | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return String(value).split('T')[0];
 }
 
 /**
@@ -70,10 +77,14 @@ function mapTemplate(row: any): TaskTemplate {
     title: row.title,
     description: row.description || '',
     recurrence: row.recurrence,
-    // For ONCE (one-time) tasks the full due date is stored in due_day as an ISO
-    // timestamp; for recurring tasks due_day is just a day-of-month number.
+    // due_day is an INTEGER column used only by recurring tasks (day of month).
+    // One-time (ONCE) task due dates live in the template_due_date DATE column.
+    // The legacy fallback (due date previously stuffed into due_day) keeps old
+    // rows readable without breaking inserts on the integer column.
     dueDay: typeof dueDayRaw === 'number' ? dueDayRaw : undefined,
-    dueDate: dueDayRaw && String(dueDayRaw).includes('-') ? String(dueDayRaw).split('T')[0] : undefined,
+    dueDate: row.template_due_date
+      ? String(row.template_due_date).split('T')[0]
+      : (dueDayRaw && String(dueDayRaw).includes('-') ? String(dueDayRaw).split('T')[0] : undefined),
     dueDaysOfWeek: row.due_days_of_week || [],
     dueTime: row.due_time,
     startDate: row.start_date ? String(row.start_date).split('T')[0] : undefined,
@@ -134,15 +145,18 @@ export const DatabaseService = {
     };
 
     // Date handling:
-    // - ONCE tasks store the full chosen due date (as an ISO timestamp so it is
-    //   never truncated to "today") in due_day.
-    // - Recurring tasks store a day-of-month number instead.
+    // - due_day is an INTEGER column (day of month, 1-31) used ONLY by recurring
+    //   tasks. Never write a date string into it (that caused:
+    //   "invalid input syntax for type integer: 2026-10-30T00:00:00.000Z").
+    // - ONCE (one-time) tasks store the full chosen due date in the
+    //   template_due_date DATE column instead.
     if (template.recurrence === 'ONCE') {
-      if (template.dueDate) {
-        insertData.due_day = toUTCDateInput(template.dueDate);
+      const dueDateOnly = toDateOnly(template.dueDate);
+      if (dueDateOnly) {
+        insertData.template_due_date = dueDateOnly;
       }
-    } else if (template.dueDay !== undefined) {
-      insertData.due_day = template.dueDay;
+    } else if (typeof template.dueDay === 'number' && Number.isFinite(template.dueDay)) {
+      insertData.due_day = Math.trunc(template.dueDay);
     }
 
     // Add daily recurrence fields if provided
@@ -154,7 +168,8 @@ export const DatabaseService = {
         insertData.due_time = template.dueTime;
       }
       if (template.startDate) {
-        insertData.start_date = toUTCDateInput(template.startDate);
+        const startOnly = toDateOnly(template.startDate);
+        if (startOnly) insertData.start_date = startOnly;
       }
     }
 
@@ -172,31 +187,52 @@ export const DatabaseService = {
     if (error) {
       console.error('[DB] Error creating template:', error);
       
-      // If the error is about resource_link column not existing, try again without it
-      if (error.message?.includes('resource_link') || error.code === '42703') {
-        console.warn('[DB] resource_link column missing, retrying without it...');
-        
-        const { data: retryData, error: retryError } = await supabase
+      // If the error is about a missing optional column (resource_link or
+      // template_due_date), retry without it so older schemas still work.
+      if (error.message?.includes('resource_link') ||
+          error.message?.includes('template_due_date') ||
+          error.code === '42703') {
+        console.warn('[DB] Optional column missing, retrying without it...', error.message);
+
+        const retryData: any = {
+          title: template.title,
+          description: template.description,
+          recurrence: template.recurrence,
+          category: template.category,
+          priority: template.priority,
+          created_by: template.createdBy,
+        };
+        if (template.recurrence === 'ONCE') {
+          const dueDateOnly = toDateOnly(template.dueDate);
+          // Only include template_due_date if that wasn't the missing column
+          if (dueDateOnly && !error.message?.includes('template_due_date')) {
+            retryData.template_due_date = dueDateOnly;
+          }
+        } else if (typeof template.dueDay === 'number' && Number.isFinite(template.dueDay)) {
+          retryData.due_day = Math.trunc(template.dueDay);
+        }
+        if (template.recurrence === 'DAILY') {
+          if (template.dueDaysOfWeek && template.dueDaysOfWeek.length > 0) {
+            retryData.due_days_of_week = template.dueDaysOfWeek;
+          }
+          if (template.dueTime) retryData.due_time = template.dueTime;
+          if (template.startDate) {
+            const startOnly = toDateOnly(template.startDate);
+            if (startOnly) retryData.start_date = startOnly;
+          }
+        }
+
+        const { data: retryResult, error: retryError } = await supabase
           .from('task_templates')
-          .insert({
-            title: template.title,
-            description: template.description,
-            recurrence: template.recurrence,
-            due_day: template.recurrence === 'ONCE' && template.dueDate
-              ? toUTCDateInput(template.dueDate)
-              : template.dueDay,
-            category: template.category,
-            priority: template.priority,
-            created_by: template.createdBy,
-          })
+          .insert(retryData)
           .select()
           .single();
-        
+
         if (retryError) {
           return { template: null, error: retryError.message };
         }
-        
-        return { template: mapTemplate(retryData) };
+
+        return { template: mapTemplate(retryResult) };
       }
       
       return { template: null, error: error.message };
@@ -224,18 +260,21 @@ export const DatabaseService = {
     if (updates.priority !== undefined) updateData.priority = updates.priority;
     if (updates.resourceLink !== undefined) updateData.resource_link = updates.resourceLink || null;
 
-    // Date handling for due_day:
-    // - ONCE tasks store the full chosen due date as an ISO timestamp in due_day.
-    // - Recurring tasks store a day-of-month number instead.
+    // Date handling:
+    // - due_day is an INTEGER column (day of month) used only by recurring tasks.
+    //   Never write a date string into it.
+    // - ONCE (one-time) tasks store the chosen due date in template_due_date (DATE).
     const effectiveRecurrence = updates.recurrence;
+    let newOnceDueDate: string | undefined;
     if (effectiveRecurrence === 'ONCE') {
       if (updates.dueDate !== undefined && updates.dueDate) {
-        updateData.due_day = toUTCDateInput(updates.dueDate);
+        newOnceDueDate = toDateOnly(updates.dueDate);
+        if (newOnceDueDate) updateData.template_due_date = newOnceDueDate;
       }
-    } else if (updates.dueDay !== undefined) {
-      updateData.due_day = updates.dueDay;
+    } else if (typeof updates.dueDay === 'number' && Number.isFinite(updates.dueDay)) {
+      updateData.due_day = Math.trunc(updates.dueDay);
     }
-    
+
     // Add daily recurrence fields if provided
     if (updates.dueDaysOfWeek !== undefined) {
       updateData.due_days_of_week = updates.dueDaysOfWeek;
@@ -244,7 +283,7 @@ export const DatabaseService = {
       updateData.due_time = updates.dueTime;
     }
     if (updates.startDate !== undefined) {
-      updateData.start_date = updates.startDate ? toUTCDateInput(updates.startDate) : null;
+      updateData.start_date = updates.startDate ? toDateOnly(updates.startDate) : null;
     }
 
     const { data, error } = await supabase
@@ -253,7 +292,7 @@ export const DatabaseService = {
       .eq('id', id)
       .select()
       .single();
-    
+
     if (error) {
       console.error('[DB] Error updating template:', error);
       return null;
@@ -262,11 +301,10 @@ export const DatabaseService = {
     // If this is a one-time task and the due date changed, also update the
     // due_date of its existing (not yet completed) instances so the change
     // is reflected everywhere.
-    if (effectiveRecurrence === 'ONCE' && updateData.due_day !== undefined) {
-      const newDueDate = String(updateData.due_day).split('T')[0];
+    if (effectiveRecurrence === 'ONCE' && newOnceDueDate) {
       const { error: instError } = await supabase
         .from('task_instances')
-        .update({ due_date: newDueDate })
+        .update({ due_date: newOnceDueDate })
         .eq('template_id', id)
         .neq('status', 'COMPLETED');
 
@@ -349,8 +387,8 @@ export const DatabaseService = {
         
         if (template.recurrence === 'ONCE') {
           // BUG FIX: previously this used "today" and ignored the chosen due date.
-          // For one-time tasks, due_day stores the full due date (ISO timestamp),
-          // so use that instead of the current date.
+          // For one-time tasks the chosen due date is stored in template_due_date
+          // (legacy rows may have it inside due_day), so use that instead of today.
           const mapped = mapTemplate(template);
           dueDate = mapped.dueDate || getLocalTodayString();
         } else if (template.recurrence === 'DAILY' && template.start_date) {
