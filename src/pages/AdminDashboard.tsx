@@ -144,25 +144,25 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="space-y-4">
+      {/* Welcome Banner - Compact */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-4 text-white">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold">Welcome back, {user?.name?.split(' ')[0]}!</h1>
-            <p className="text-blue-100 text-sm mt-1">
+            <h1 className="text-base font-bold">Welcome back, {user?.name?.split(' ')[0]}!</h1>
+            <p className="text-blue-100 text-xs mt-0.5">
               {dashboardScope === 'all' 
                 ? "Here's what's happening across DILG Siquijor today."
                 : "Here are your assigned tasks."}
             </p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-1.5 flex-wrap">
             {/* Dashboard Scope Toggle - Only for Admins and Super Admins */}
             {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
-              <div className="flex gap-1 bg-white/10 rounded-lg p-1">
+              <div className="flex gap-0.5 bg-white/10 rounded-md p-0.5">
                 <button
                   onClick={() => setDashboardScope('all')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
                     dashboardScope === 'all' ? 'bg-white text-blue-700' : 'text-white hover:bg-white/20'
                   }`}
                 >
@@ -170,7 +170,7 @@ export default function AdminDashboard() {
                 </button>
                 <button
                   onClick={() => setDashboardScope('my')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
                     dashboardScope === 'my' ? 'bg-white text-blue-700' : 'text-white hover:bg-white/20'
                   }`}
                 >
@@ -181,16 +181,16 @@ export default function AdminDashboard() {
             {user?.role === 'SUPER_ADMIN' && (
               <button
                 onClick={handleResetDatabase}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-100 text-sm font-medium rounded-lg transition-all border border-red-400/30"
+                className="inline-flex items-center gap-1 px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-100 text-[11px] font-medium rounded transition-all border border-red-400/30"
                 title="Reset all data"
               >
-                <RotateCcw className="w-4 h-4" />
+                <RotateCcw className="w-3 h-3" />
                 Reset DB
               </button>
             )}
             <button
               onClick={() => setViewMode('stats')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`px-3 py-1 rounded text-[11px] font-medium transition-all ${
                 viewMode === 'stats' ? 'bg-white text-blue-700' : 'bg-white/10 text-white hover:bg-white/20'
               }`}
             >
@@ -198,51 +198,57 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => setViewMode('kanban')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              className={`px-3 py-1 rounded text-[11px] font-medium transition-all ${
                 viewMode === 'kanban' ? 'bg-white text-blue-700' : 'bg-white/10 text-white hover:bg-white/20'
               }`}
             >
-              Kanban Board
+              Kanban
             </button>
           </div>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Stats Cards - Compact */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {statCards.map((stat) => (
           <div 
             key={stat.label} 
             onClick={() => stat.status && handleStatClick(stat.status)}
-            className={`bg-white rounded-xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-all ${
+            className={`bg-white rounded-lg border border-slate-200 p-3 shadow-sm hover:shadow-md transition-all ${
               stat.status ? 'cursor-pointer hover:border-blue-300' : ''
             } ${statusFilter === stat.status ? 'ring-2 ring-blue-500 border-blue-300' : ''}`}
           >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">{stat.label}</p>
-                <p className="text-2xl font-bold text-slate-800 mt-1">{stat.value}</p>
-                <div className="flex items-center gap-1 mt-2">
-                  <ArrowUpRight className={`w-3 h-3 ${stat.change.startsWith('+') ? 'text-emerald-500' : 'text-red-500'}`} />
-                  <span className={`text-xs font-medium ${stat.change.startsWith('+') ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {stat.change}
-                  </span>
-                  {stat.status && <span className="text-xs text-blue-500 ml-1">Click to filter</span>}
-                </div>
+            <div className="flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">{stat.label}</p>
+                <p className="text-xl font-bold text-slate-800 mt-0.5">{stat.value}</p>
+                {stat.status && (
+                  <p className="text-[10px] text-blue-500 mt-0.5">Click to filter</p>
+                )}
               </div>
-              <div className={`w-10 h-10 bg-gradient-to-br ${stat.color} rounded-lg flex items-center justify-center shadow-sm`}>
-                <stat.icon className="w-5 h-5 text-white" />
+              <div className={`w-8 h-8 bg-gradient-to-br ${stat.color} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                <stat.icon className="w-4 h-4 text-white" />
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Recurrence Category Filters */}
+      {/* Recurrence Category Filters - Compact */}
       {getRecurrenceStats().length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
-          <h3 className="text-base font-semibold text-slate-800 mb-4">Tasks by Recurrence</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-800">Tasks by Recurrence</h3>
+            {recurrenceFilter && (
+              <button
+                onClick={() => setRecurrenceFilter(null)}
+                className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition-colors"
+              >
+                Clear Filter
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
             {getRecurrenceStats().map((recurrence) => {
               const config = {
                 'DAILY': { icon: '🔄', color: 'bg-blue-50 border-blue-200', label: 'Daily' },
@@ -257,39 +263,42 @@ export default function AdminDashboard() {
               return (
                 <div 
                   key={recurrence.type}
-                  onClick={() => setRecurrenceFilter(recurrenceFilter === recurrence.type ? null : recurrence.type)}
-                  className={`border-2 rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${config.color} ${
+                  onClick={() => {
+                    // Toggle recurrence filter and automatically show all tasks
+                    if (recurrenceFilter === recurrence.type) {
+                      setRecurrenceFilter(null);
+                      setStatusFilter(null);
+                    } else {
+                      setRecurrenceFilter(recurrence.type);
+                      setStatusFilter('ALL'); // Automatically show all tasks when filtering by recurrence
+                    }
+                  }}
+                  className={`border-2 rounded-lg p-2 cursor-pointer transition-all hover:shadow-md ${config.color} ${
                     recurrenceFilter === recurrence.type ? 'ring-2 ring-blue-500' : ''
                   }`}
                 >
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-2xl">{config.icon}</span>
-                    <h4 className="text-sm font-bold text-slate-800">{config.label}</h4>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="text-lg">{config.icon}</span>
+                    <h4 className="text-xs font-bold text-slate-800">{config.label}</h4>
                   </div>
                   
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center justify-between text-[10px]">
                       <span className="text-slate-600">Total:</span>
                       <span className="font-bold text-slate-800">{recurrence.stats.total}</span>
                     </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-emerald-600">✓ Completed:</span>
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-emerald-600">✓</span>
                       <span className="font-bold text-emerald-700">{recurrence.stats.completed}</span>
                     </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-amber-600">⏳ Pending:</span>
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-amber-600">⏳</span>
                       <span className="font-bold text-amber-700">{recurrence.stats.pending}</span>
                     </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-red-600">⚠️ Overdue:</span>
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-red-600">⚠️</span>
                       <span className="font-bold text-red-700">{recurrence.stats.overdue}</span>
                     </div>
-                  </div>
-
-                  <div className="mt-3 pt-3 border-t border-slate-200">
-                    <p className="text-xs text-slate-500 text-center">
-                      {recurrenceFilter === recurrence.type ? 'Click to deselect' : 'Click to view tasks'}
-                    </p>
                   </div>
                 </div>
               );
@@ -297,18 +306,10 @@ export default function AdminDashboard() {
           </div>
 
           {recurrenceFilter && (
-            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-blue-800">
-                  <span className="font-semibold">Viewing:</span> {recurrenceFilter} tasks ({getTasksByRecurrence(recurrenceFilter).stats.total} total)
-                </p>
-                <button
-                  onClick={() => setRecurrenceFilter(null)}
-                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition-colors"
-                >
-                  Clear Filter
-                </button>
-              </div>
+            <div className="mt-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded">
+              <p className="text-xs text-blue-800">
+                <span className="font-semibold">Viewing:</span> {recurrenceFilter} tasks ({getTasksByRecurrence(recurrenceFilter).stats.total} total)
+              </p>
             </div>
           )}
         </div>
@@ -316,17 +317,17 @@ export default function AdminDashboard() {
 
       {viewMode === 'stats' ? (
         <>
-          {/* Charts Row - Stacked charts on left, wider overdue list on right */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Charts Row - Compact Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
             {/* Left Column - Stacked Charts */}
-            <div className="lg:col-span-3 space-y-6">
+            <div className="lg:col-span-3 space-y-3">
               {/* Completion Overview */}
-              <div className="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">Completion Overview</h3>
+              <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-sm">
+                <h3 className="text-xs font-semibold text-slate-800 mb-2">Completion Overview</h3>
                 <div className="flex items-center justify-center">
                   <div className="text-center">
-                    <div className="relative w-24 h-24 mx-auto">
-                      <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 120 120">
+                    <div className="relative w-20 h-20 mx-auto">
+                      <svg className="w-20 h-20 transform -rotate-90" viewBox="0 0 120 120">
                         <circle cx="60" cy="60" r="50" stroke="#e2e8f0" strokeWidth="10" fill="none" />
                         <circle
                           cx="60" cy="60" r="50"
@@ -338,31 +339,30 @@ export default function AdminDashboard() {
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-xl font-bold text-slate-800">{stats.completionRate}%</span>
+                        <span className="text-lg font-bold text-slate-800">{stats.completionRate}%</span>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-500 mt-2">Overall Completion Rate</p>
-                    <p className="text-xs text-slate-400">{stats.completed} of {stats.total} tasks</p>
+                    <p className="text-[10px] text-slate-500 mt-1">{stats.completed} of {stats.total} tasks</p>
                   </div>
                 </div>
               </div>
 
               {/* Department Completion Rates */}
-              <div className="bg-white rounded-xl border border-slate-100 p-4 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">Department Rates</h3>
-                <div className="h-40">
+              <div className="bg-white rounded-lg border border-slate-200 p-3 shadow-sm">
+                <h3 className="text-xs font-semibold text-slate-800 mb-2">Department Rates</h3>
+                <div className="h-32">
                   {departmentChartData().length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={departmentChartData()} layout="vertical">
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                        <XAxis type="number" tick={{ fontSize: 9 }} stroke="#94a3b8" domain={[0, 100]} />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 8 }} stroke="#94a3b8" width={80} />
-                        <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '10px' }} />
-                        <Bar dataKey="completionRate" fill="#1e40af" radius={[0, 4, 4, 0]} />
+                        <XAxis type="number" tick={{ fontSize: 8 }} stroke="#94a3b8" domain={[0, 100]} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 7 }} stroke="#94a3b8" width={70} />
+                        <Tooltip contentStyle={{ borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '9px' }} />
+                        <Bar dataKey="completionRate" fill="#1e40af" radius={[0, 3, 3, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="h-full flex items-center justify-center text-slate-400 text-xs">
+                    <div className="h-full flex items-center justify-center text-slate-400 text-[10px]">
                       No data yet
                     </div>
                   )}
@@ -371,34 +371,34 @@ export default function AdminDashboard() {
             </div>
 
             {/* Right Column - Overdue & At Risk Tasks (wider) */}
-            <div className="lg:col-span-9 bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-slate-800">Overdue & At Risk Tasks</h3>
-                <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded-full">
+            <div className="lg:col-span-9 bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-semibold text-slate-800">Overdue & At Risk Tasks</h3>
+                <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-bold rounded-full">
                   {stats.overdue} overdue
                 </span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {instances
                   .filter(t => t.status === 'OVERDUE' || t.status === 'PENDING')
-                  .slice(0, 8)
+                  .slice(0, 10)
                   .map((task) => (
                     <div 
                       key={task.id} 
                       onClick={() => navigate(`/my-tasks?highlight=${task.id}`)}
-                      className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+                      className="flex items-center gap-2 p-2 rounded bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
                     >
-                      <div className={`w-2 h-2 rounded-full ${task.status === 'OVERDUE' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${task.status === 'OVERDUE' ? 'bg-red-500' : 'bg-amber-500'}`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-700 truncate">{task.template?.title}</p>
-                        <p className="text-xs text-slate-500">{task.assignee?.name ? formatName(task.assignee.name) : 'Unassigned'} • {task.assignee?.department}</p>
+                        <p className="text-xs font-medium text-slate-700 truncate">{task.template?.title}</p>
+                        <p className="text-[10px] text-slate-500 truncate">{task.assignee?.name ? formatName(task.assignee.name) : 'Unassigned'} • {task.assignee?.department}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs font-medium text-slate-600">
-                          Due: {task.dueDate}
-                          {task.template?.dueTime && <span className="ml-1 text-blue-600">at {task.template.dueTime}</span>}
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-[10px] font-medium text-slate-600">
+                          {task.dueDate}
+                          {task.template?.dueTime && <span className="ml-0.5 text-blue-600">{task.template.dueTime}</span>}
                         </p>
-                        <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                        <span className={`text-[9px] font-bold uppercase px-1 py-0.5 rounded ${
                           task.status === 'OVERDUE' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
                         }`}>
                           {task.status}
@@ -407,9 +407,9 @@ export default function AdminDashboard() {
                     </div>
                   ))}
                 {instances.filter(t => t.status === 'OVERDUE' || t.status === 'PENDING').length === 0 && (
-                  <div className="text-center py-6">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-                    <p className="text-sm text-slate-500">All tasks are on track!</p>
+                  <div className="text-center py-4">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
+                    <p className="text-xs text-slate-500">All tasks are on track!</p>
                   </div>
                 )}
               </div>
