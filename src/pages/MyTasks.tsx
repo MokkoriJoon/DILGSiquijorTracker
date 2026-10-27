@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useFilters } from '../context/FilterContext';
 import { DatabaseService } from '../services/database';
 import { NotificationService } from '../services/notification';
 import type { TaskInstance } from '../types';
@@ -8,6 +9,7 @@ import { CheckCircle2, Clock, AlertTriangle, Calendar, Tag, Upload, Send, Extern
 
 export default function MyTasks() {
   const { user } = useAuth();
+  const { filters, setFilter } = useFilters();
   const [searchParams] = useSearchParams();
   const highlightTaskId = searchParams.get('highlight');
   const filterParam = searchParams.get('filter');
@@ -15,7 +17,10 @@ export default function MyTasks() {
   const [loading, setLoading] = useState(true);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [taskToComplete, setTaskToComplete] = useState<TaskInstance | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  
+  // Use global filter context
+  const statusFilter = filters.statusFilter;
+  const setStatusFilter = (value: string | null) => setFilter('statusFilter', value);
 
   useEffect(() => {
     loadTasks();
@@ -106,58 +111,63 @@ export default function MyTasks() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white">
-        <h1 className="text-xl font-bold">My Tasks</h1>
-        <p className="text-blue-100 text-sm mt-1">Track and manage your assigned tasks</p>
-        <div className="flex flex-wrap gap-3 mt-4">
-          <button
-            onClick={() => handleStatClick('COMPLETED')}
-            className={`bg-white/10 rounded-lg px-4 py-2 cursor-pointer transition-all hover:bg-white/20 ${
-              statusFilter === 'COMPLETED' ? 'ring-2 ring-white bg-white/30' : ''
-            }`}
-          >
-            <p className="text-2xl font-bold">{statusCounts.COMPLETED}</p>
-            <p className="text-xs text-blue-200">Completed</p>
-          </button>
-          <button
-            onClick={() => handleStatClick('OVERDUE')}
-            className={`bg-white/10 rounded-lg px-4 py-2 cursor-pointer transition-all hover:bg-white/20 ${
-              statusFilter === 'OVERDUE' ? 'ring-2 ring-white bg-white/30' : ''
-            }`}
-          >
-            <p className="text-2xl font-bold">{statusCounts.OVERDUE}</p>
-            <p className="text-xs text-blue-200">Overdue</p>
-          </button>
-          <button
-            onClick={() => handleStatClick('PENDING')}
-            className={`bg-white/10 rounded-lg px-4 py-2 cursor-pointer transition-all hover:bg-white/20 ${
-              statusFilter === 'PENDING' ? 'ring-2 ring-white bg-white/30' : ''
-            }`}
-          >
-            <p className="text-2xl font-bold">{statusCounts.PENDING}</p>
-            <p className="text-xs text-blue-200">Pending</p>
-          </button>
+    <div className="space-y-4">
+      {/* Compact Header with Stats */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-4 text-white">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-base font-bold">My Tasks</h1>
+            <p className="text-blue-100 text-xs mt-0.5">Track and manage your assigned tasks</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleStatClick('COMPLETED')}
+              className={`bg-white/10 rounded-md px-3 py-1.5 cursor-pointer transition-all hover:bg-white/20 ${
+                statusFilter === 'COMPLETED' ? 'ring-2 ring-white bg-white/30' : ''
+              }`}
+            >
+              <p className="text-lg font-bold">{statusCounts.COMPLETED}</p>
+              <p className="text-[10px] text-blue-200">Completed</p>
+            </button>
+            <button
+              onClick={() => handleStatClick('OVERDUE')}
+              className={`bg-white/10 rounded-md px-3 py-1.5 cursor-pointer transition-all hover:bg-white/20 ${
+                statusFilter === 'OVERDUE' ? 'ring-2 ring-white bg-white/30' : ''
+              }`}
+            >
+              <p className="text-lg font-bold">{statusCounts.OVERDUE}</p>
+              <p className="text-[10px] text-blue-200">Overdue</p>
+            </button>
+            <button
+              onClick={() => handleStatClick('PENDING')}
+              className={`bg-white/10 rounded-md px-3 py-1.5 cursor-pointer transition-all hover:bg-white/20 ${
+                statusFilter === 'PENDING' ? 'ring-2 ring-white bg-white/30' : ''
+              }`}
+            >
+              <p className="text-lg font-bold">{statusCounts.PENDING}</p>
+              <p className="text-[10px] text-blue-200">Pending</p>
+            </button>
+          </div>
         </div>
         {statusFilter && (
-          <div className="mt-4 flex items-center gap-3">
-            <span className="text-sm text-blue-100">
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-xs text-blue-100">
               Showing: <span className="font-bold">{statusFilter}</span> ({filteredTasks.length} tasks)
             </span>
             <button
               onClick={() => setStatusFilter(null)}
-              className="px-3 py-1 bg-white/20 hover:bg-white/30 text-white text-sm rounded-lg transition-colors"
+              className="px-2 py-1 bg-white/20 hover:bg-white/30 text-white text-xs rounded transition-colors"
             >
-              View All Tasks
+              Clear Filter
             </button>
           </div>
         )}
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {filteredTasks.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
-            <CheckCircle2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <div className="text-center py-8 bg-white rounded-lg border border-slate-200">
+            <CheckCircle2 className="w-10 h-10 text-slate-300 mx-auto mb-2" />
             <h3 className="text-sm font-semibold text-slate-700">
               {statusFilter ? `No ${statusFilter.toLowerCase()} tasks` : 'No tasks assigned yet'}
             </h3>
@@ -167,36 +177,40 @@ export default function MyTasks() {
           </div>
         ) : (
           filteredTasks.map((task) => (
-            <div key={task.id} id={`task-${task.id}`} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-all">
-              <div className="flex items-start gap-4">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+            <div key={task.id} id={`task-${task.id}`} className="bg-white rounded-lg border border-slate-200 p-3 hover:shadow-md transition-all">
+              <div className="flex items-start gap-3">
+                <div className={`w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 ${
                   task.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
                   task.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
                   task.status === 'OVERDUE' ? 'bg-red-100 text-red-700' :
                   'bg-slate-100 text-slate-700'
                 }`}>
-                  {task.status === 'COMPLETED' ? <CheckCircle2 className="w-5 h-5" /> :
-                   task.status === 'IN_PROGRESS' ? <Clock className="w-5 h-5" /> :
-                   task.status === 'OVERDUE' ? <AlertTriangle className="w-5 h-5" /> :
-                   <Clock className="w-5 h-5" />}
+                  {task.status === 'COMPLETED' ? <CheckCircle2 className="w-4 h-4" /> :
+                   task.status === 'IN_PROGRESS' ? <Clock className="w-4 h-4" /> :
+                   task.status === 'OVERDUE' ? <AlertTriangle className="w-4 h-4" /> :
+                   <Clock className="w-4 h-4" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-slate-800">{task.template?.title}</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">{task.template?.description}</p>
-                  <div className="flex flex-wrap items-center gap-3 mt-3">
-                    <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                      <Calendar className="w-3 h-3" />
-                      Due: {task.dueDate}
-                      {task.template?.dueTime && <span className="ml-1 text-blue-600 font-medium">at {task.template.dueTime}</span>}
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-xs font-semibold text-slate-800">{task.template?.title}</h3>
+                    <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded flex-shrink-0 ${
+                      task.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
+                      task.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                      task.status === 'OVERDUE' ? 'bg-red-100 text-red-700' :
+                      'bg-slate-100 text-slate-700'
+                    }`}>
+                      {task.status}
                     </span>
-                    {task.template?.startDate && task.template?.recurrence === 'DAILY' && (
-                      <span className="inline-flex items-center gap-1 text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
-                        <Clock className="w-3 h-3" />
-                        Starts: {task.template.startDate}
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                      <Tag className="w-3 h-3" />
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">{task.template?.description}</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                      <Calendar className="w-2.5 h-2.5" />
+                      {task.dueDate}
+                      {task.template?.dueTime && <span className="text-blue-600 font-medium">{task.template.dueTime}</span>}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                      <Tag className="w-2.5 h-2.5" />
                       {task.template?.category}
                     </span>
                     {task.template?.resourceLink && (
@@ -204,27 +218,26 @@ export default function MyTasks() {
                         href={task.template.resourceLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors"
-                        title="Click to open resource link"
+                        className="inline-flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-700"
                       >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        Open Resource Link
+                        <ExternalLink className="w-2.5 h-2.5" />
+                        Resource
                       </a>
                     )}
                   </div>
                   {task.output && (
-                    <div className="mt-3 p-2 bg-emerald-50 border border-emerald-100 rounded-lg">
-                      <p className="text-xs text-emerald-700"><strong>Output:</strong> {task.output}</p>
+                    <div className="mt-2 p-1.5 bg-emerald-50 border border-emerald-100 rounded">
+                      <p className="text-[10px] text-emerald-700"><strong>Output:</strong> {task.output}</p>
                     </div>
                   )}
                   {task.status !== 'COMPLETED' && (
-                    <div className="mt-3">
+                    <div className="mt-2">
                       <button
                         onClick={() => handleCompleteTask(task)}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-medium rounded transition-colors"
                       >
-                        <CheckCircle2 className="w-4 h-4" />
-                        Mark as Complete
+                        <CheckCircle2 className="w-3 h-3" />
+                        Mark Complete
                       </button>
                     </div>
                   )}

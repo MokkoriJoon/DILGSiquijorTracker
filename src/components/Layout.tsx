@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSiteSettings } from '../context/SiteSettingsContext';
 import { NotificationBell } from './NotificationBell';
 import ToastContainer from './ToastContainer';
+import FloatingFilterIndicator from './FloatingFilterIndicator';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -197,6 +198,9 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Toast Notifications */}
       <ToastContainer />
+
+      {/* Floating Filter Indicator */}
+      <FloatingFilterIndicator />
     </div>
   );
 }

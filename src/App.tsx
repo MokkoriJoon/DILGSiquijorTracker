@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { SiteSettingsProvider } from './context/SiteSettingsContext';
+import { FilterProvider } from './context/FilterContext';
 import Layout from './components/Layout';
 import PublicDashboard from './pages/PublicDashboard';
 import Login from './pages/Login';
@@ -121,7 +122,9 @@ export default function App() {
     <BrowserRouter>
       <SiteSettingsProvider>
         <AuthProvider>
-          <AppRoutes />
+          <FilterProvider>
+            <AppRoutes />
+          </FilterProvider>
         </AuthProvider>
       </SiteSettingsProvider>
     </BrowserRouter>

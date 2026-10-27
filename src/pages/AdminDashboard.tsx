@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useFilters } from '../context/FilterContext';
 import { DatabaseService } from '../services/database';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -16,6 +17,7 @@ import { formatName } from '../utils/format';
 export default function AdminDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { filters, setFilter, clearFilter } = useFilters();
   const [viewMode, setViewMode] = useState<'stats' | 'kanban'>('stats');
   const [dashboardScope, setDashboardScope] = useState<'all' | 'my'>('my'); // Default to 'my' for logged-in users
   const [stats, setStats] = useState({
@@ -23,8 +25,13 @@ export default function AdminDashboard() {
   });
   const [instances, setInstances] = useState<TaskInstance[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [recurrenceFilter, setRecurrenceFilter] = useState<string | null>(null);
+  
+  // Use global filter context
+  const statusFilter = filters.statusFilter;
+  const recurrenceFilter = filters.recurrenceFilter;
+  
+  const setStatusFilter = (value: string | null) => setFilter('statusFilter', value);
+  const setRecurrenceFilter = (value: string | null) => setFilter('recurrenceFilter', value);
 
   useEffect(() => {
     loadData();
