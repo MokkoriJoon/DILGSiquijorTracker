@@ -2,25 +2,43 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { DatabaseService } from '../services/database';
 import type { TaskInstance } from '../types';
-import { ExternalLink, Link as LinkIcon, Calendar, Tag, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { ExternalLink, Link as LinkIcon, Calendar, Tag, CheckCircle2, Clock, AlertTriangle, Bookmark, Plus, Edit2, Trash2 } from 'lucide-react';
 
 export default function ResourceLinks() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<TaskInstance[]>([]);
+  const [bookmarks, setBookmarks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showBookmarkModal, setShowBookmarkModal] = useState(false);
+  const [editingBookmark, setEditingBookmark] = useState<any>(null);
 
   useEffect(() => {
-    loadTasks();
+    loadData();
   }, [user]);
 
-  async function loadTasks() {
+  async function loadData() {
     if (!user) return;
     setLoading(true);
+    
+    // Load task resource links
     const data = await DatabaseService.getInstancesByUser(user.id);
-    // Filter only tasks with resource links
     const tasksWithLinks = data.filter(task => task.template?.resourceLink);
     setTasks(tasksWithLinks);
+    
+    // Load personal bookmarks
+    const bookmarksData = await DatabaseService.getPersonalBookmarks(user.id);
+    setBookmarks(bookmarksData);
+    
     setLoading(false);
+  }
+
+  async function handleDeleteBookmark(id: string) {
+    if (!confirm('Delete this bookmark?')) return;
+    
+    const success = await DatabaseService.deletePersonalBookmark(id);
+    if (success) {
+      setBookmarks(bookmarks.filter(b => b.id !== id));
+    }
   }
 
   const getStatusIcon = (status: string) => {
@@ -175,6 +193,267 @@ export default function ResourceLinks() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Personal Bookmarks Section */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Bookmark className="w-5 h-5 text-amber-600" />
+            <h3 className="text-base font-semibold text-slate-800">Personal Bookmarks</h3>
+          </div>
+          <button
+            onClick={() => {
+              setEditingBookmark(null);
+              setShowBookmarkModal(true);
+            }}
+            className="inline-flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add Bookmark
+          </button>
+        </div>
+
+        {bookmarks.length === 0 ? (
+          <div className="text-center py-8">
+            <Bookmark className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-sm text-slate-500">No personal bookmarks yet</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Add your favorite links for quick access
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {bookmarks.map((bookmark) => (
+              <div
+                key={bookmark.id}
+                className="border border-slate-200 rounded-lg p-3 hover:shadow-md transition-all bg-amber-50/30"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h4 className="text-sm font-semibold text-slate-800 truncate flex-1">
+                    {bookmark.title}
+                  </h4>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        setEditingBookmark(bookmark);
+                        setShowBookmarkModal(true);
+                      }}
+                      className="p-1 hover:bg-blue-100 rounded transition-colors"
+                      title="Edit"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteBookmark(bookmark.id)}
+                      className="p-1 hover:bg-red-100 rounded transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    </button>
+                  </div>
+                </div>
+                
+                {bookmark.description && (
+                  <p className="text-xs text-slate-600 mb-2 line-clamp-2">
+                    {bookmark.description}
+                  </p>
+                )}
+                
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                    {bookmark.category}
+                  </span>
+                </div>
+
+                <a
+                  href={bookmark.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-lg transition-colors w-full justify-center"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Open Link
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Bookmark Modal */}
+      {showBookmarkModal && (
+        <BookmarkModal
+          bookmark={editingBookmark}
+          userId={user?.id || ''}
+          onClose={() => {
+            setShowBookmarkModal(false);
+            setEditingBookmark(null);
+          }}
+          onSaved={() => {
+            setShowBookmarkModal(false);
+            setEditingBookmark(null);
+            loadData();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function BookmarkModal({ bookmark, userId, onClose, onSaved }: {
+  bookmark: any;
+  userId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState(bookmark?.title || '');
+  const [url, setUrl] = useState(bookmark?.url || '');
+  const [description, setDescription] = useState(bookmark?.description || '');
+  const [category, setCategory] = useState(bookmark?.category || 'General');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const categories = ['General', 'Work', 'Reference', 'Tools', 'Learning', 'Other'];
+
+  const handleSubmit = async () => {
+    if (!title.trim() || !url.trim()) {
+      setError('Title and URL are required');
+      return;
+    }
+
+    // Validate URL
+    try {
+      new URL(url);
+    } catch {
+      setError('Please enter a valid URL');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      if (bookmark) {
+        // Update existing bookmark
+        const result = await DatabaseService.updatePersonalBookmark(bookmark.id, {
+          title,
+          url,
+          description,
+          category,
+        });
+
+        if (!result.success) {
+          setError(result.error || 'Failed to update bookmark');
+          setLoading(false);
+          return;
+        }
+      } else {
+        // Create new bookmark
+        const result = await DatabaseService.createPersonalBookmark({
+          userId,
+          title,
+          url,
+          description,
+          category,
+        });
+
+        if (!result.success) {
+          setError(result.error || 'Failed to create bookmark');
+          setLoading(false);
+          return;
+        }
+      }
+
+      onSaved();
+    } catch (err) {
+      setError('An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md">
+        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
+          <h3 className="text-lg font-bold text-slate-800">
+            {bookmark ? 'Edit Bookmark' : 'Add Bookmark'}
+          </h3>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg">
+            <span className="text-xl">×</span>
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Title *</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+              placeholder="My Favorite Link"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">URL *</label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+              placeholder="https://example.com"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 resize-none"
+              placeholder="Optional description..."
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+            >
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50"
+          >
+            {loading ? 'Saving...' : bookmark ? 'Update' : 'Add Bookmark'}
+          </button>
+        </div>
       </div>
     </div>
   );
