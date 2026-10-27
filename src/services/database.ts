@@ -333,6 +333,108 @@ export const DatabaseService = {
     }
   },
 
+  // ============ PERSONAL BOOKMARKS ============
+
+  async getPersonalBookmarks(userId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('personal_bookmarks')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('[DB] Error fetching bookmarks:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('[DB] Exception fetching bookmarks:', error);
+      return [];
+    }
+  },
+
+  async createPersonalBookmark(bookmark: {
+    userId: string;
+    title: string;
+    url: string;
+    description?: string;
+    category?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { error } = await supabase
+        .from('personal_bookmarks')
+        .insert({
+          user_id: bookmark.userId,
+          title: bookmark.title,
+          url: bookmark.url,
+          description: bookmark.description || null,
+          category: bookmark.category || 'General',
+        });
+
+      if (error) {
+        console.error('[DB] Error creating bookmark:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('[DB] Exception creating bookmark:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  },
+
+  async updatePersonalBookmark(id: string, updates: {
+    title?: string;
+    url?: string;
+    description?: string;
+    category?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const updateData: any = { updated_at: new Date().toISOString() };
+      
+      if (updates.title !== undefined) updateData.title = updates.title;
+      if (updates.url !== undefined) updateData.url = updates.url;
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.category !== undefined) updateData.category = updates.category;
+
+      const { error } = await supabase
+        .from('personal_bookmarks')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) {
+        console.error('[DB] Error updating bookmark:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('[DB] Exception updating bookmark:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  },
+
+  async deletePersonalBookmark(id: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('personal_bookmarks')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('[DB] Error deleting bookmark:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('[DB] Exception deleting bookmark:', error);
+      return false;
+    }
+  },
+
   // ============ TASK INSTANCES ============
   
   async getInstances(options?: { userId?: string; includeInvisible?: boolean }): Promise<TaskInstance[]> {

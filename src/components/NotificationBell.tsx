@@ -15,22 +15,68 @@ export function NotificationBell() {
   useEffect(() => {
     if (user) {
       loadNotifications();
+      
+      // Load cached notifications immediately for offline support
+      const cached = localStorage.getItem(`notifications_${user.id}`);
+      if (cached) {
+        try {
+          const cachedData = JSON.parse(cached);
+          setNotifications(cachedData.notifications || []);
+          setUnreadCount(cachedData.unreadCount || 0);
+        } catch (e) {
+          console.error('[Notification] Error loading cache:', e);
+        }
+      }
+      
       // Refresh notifications every 30 seconds
       const interval = setInterval(loadNotifications, 30000);
-      return () => clearInterval(interval);
+      
+      // Reload notifications when coming back online
+      const handleOnline = () => {
+        console.log('[Notification] Back online, reloading notifications...');
+        loadNotifications();
+      };
+      window.addEventListener('online', handleOnline);
+      
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('online', handleOnline);
+      };
     }
   }, [user]);
 
   async function loadNotifications() {
     if (!user) return;
     
-    const [notifData, count] = await Promise.all([
-      NotificationService.getUserNotifications(user.id),
-      NotificationService.getUnreadCount(user.id),
-    ]);
+    try {
+      const [notifData, count] = await Promise.all([
+        NotificationService.getUserNotifications(user.id),
+        NotificationService.getUnreadCount(user.id),
+      ]);
 
-    setNotifications(notifData);
-    setUnreadCount(count);
+      setNotifications(notifData);
+      setUnreadCount(count);
+      
+      // Cache notifications for offline support
+      localStorage.setItem(`notifications_${user.id}`, JSON.stringify({
+        notifications: notifData,
+        unreadCount: count,
+        lastUpdated: new Date().toISOString()
+      }));
+    } catch (error) {
+      console.error('[Notification] Error loading notifications:', error);
+      // If offline, use cached data
+      const cached = localStorage.getItem(`notifications_${user.id}`);
+      if (cached) {
+        try {
+          const cachedData = JSON.parse(cached);
+          setNotifications(cachedData.notifications || []);
+          setUnreadCount(cachedData.unreadCount || 0);
+        } catch (e) {
+          console.error('[Notification] Error loading cache:', e);
+        }
+      }
+    }
   }
 
   async function handleMarkAsRead(notificationId: string) {

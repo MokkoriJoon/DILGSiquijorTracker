@@ -275,9 +275,11 @@ export default function AdminDashboard() {
                     if (recurrenceFilter === recurrence.type) {
                       setRecurrenceFilter(null);
                       setStatusFilter(null);
+                      setViewMode('stats'); // Switch back to stats view when clearing filter
                     } else {
                       setRecurrenceFilter(recurrence.type);
                       setStatusFilter('ALL'); // Automatically show all tasks when filtering by recurrence
+                      setViewMode('kanban'); // Switch to kanban view when filtering
                     }
                   }}
                   className={`border-2 rounded-lg p-2 cursor-pointer transition-all hover:shadow-md ${config.color} ${
