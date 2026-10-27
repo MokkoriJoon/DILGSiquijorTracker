@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useSiteSettings } from '../context/SiteSettingsContext';
 import { supabase } from '../lib/supabase';
 import { Settings, Save, Image, Type, FileText, CheckCircle2 } from 'lucide-react';
 
@@ -11,6 +12,7 @@ interface SiteSettings {
 
 export default function SiteSettingsPage() {
   const { user } = useAuth();
+  const { refreshSettings } = useSiteSettings();
   const [settings, setSettings] = useState<SiteSettings>({
     site_name: 'D.E.N.N.I.S.',
     site_description: 'Digital Ecosystem for Navigation, Notifications, Information, and Schedules',
@@ -69,6 +71,9 @@ export default function SiteSettingsPage() {
       if (error) {
         throw error;
       }
+
+      // Refresh the global site settings context
+      await refreshSettings();
 
       setMessage({ type: 'success', text: 'Settings saved successfully!' });
       

@@ -10,6 +10,7 @@ export default function MyTasks() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const highlightTaskId = searchParams.get('highlight');
+  const filterParam = searchParams.get('filter');
   const [tasks, setTasks] = useState<TaskInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
@@ -19,6 +20,13 @@ export default function MyTasks() {
   useEffect(() => {
     loadTasks();
   }, [user]);
+
+  useEffect(() => {
+    // Handle filter parameter from URL
+    if (filterParam) {
+      setStatusFilter(filterParam);
+    }
+  }, [filterParam]);
 
   useEffect(() => {
     if (highlightTaskId) {

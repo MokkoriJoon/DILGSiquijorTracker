@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSiteSettings } from '../context/SiteSettingsContext';
 import { NotificationBell } from './NotificationBell';
 import ToastContainer from './ToastContainer';
 import {
@@ -25,6 +26,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const { user, logout } = useAuth();
+  const { settings } = useSiteSettings();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -81,12 +83,20 @@ export default function Layout({ children }: LayoutProps) {
         }`}
       >
         <div className="flex items-center gap-3 px-6 py-5 border-b border-blue-800">
-          <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center">
-            <Building2 className="w-6 h-6 text-white" />
-          </div>
+          {settings.logo_url ? (
+            <img src={settings.logo_url} alt="Logo" className="w-10 h-10 rounded-lg object-cover" />
+          ) : (
+            <div className="w-10 h-10 bg-amber-500 rounded-lg flex items-center justify-center">
+              <Building2 className="w-6 h-6 text-white" />
+            </div>
+          )}
           <div>
-            <h1 className="font-bold text-sm leading-tight">D.E.N.N.I.S.</h1>
-            <p className="text-[10px] text-blue-300 leading-tight">Digital Ecosystem</p>
+            <h1 className="font-bold text-sm leading-tight">{settings.site_name}</h1>
+            <p className="text-[10px] text-blue-300 leading-tight truncate max-w-[150px]">
+              {settings.site_description.length > 30 
+                ? settings.site_description.substring(0, 30) + '...' 
+                : settings.site_description}
+            </p>
           </div>
           <button
             className="lg:hidden ml-auto text-blue-300 hover:text-white"
