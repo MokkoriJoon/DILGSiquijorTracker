@@ -31,6 +31,50 @@
 -- ============================================================
 
 -- ------------------------------------------------------------
+-- 0) Portable email lookup on auth.users.
+--    Older Supabase projects have auth.users.email; newer ones replaced it
+--    with auth.users.raw_email (and a computed "email" view column).
+--    This helper works on BOTH and never throws "column raw_email does not
+--    exist", because the dynamic SQL is only executed when the column is
+--    actually present in the catalog.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.auth_user_email(p_uid uuid)
+RETURNS text
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_email text;
+BEGIN
+  IF p_uid IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM pg_attribute
+             WHERE attrelid = 'auth.users'::regclass
+               AND attname = 'raw_email'
+               AND NOT attisdropped) THEN
+    EXECUTE format('SELECT lower(raw_email) FROM auth.users WHERE id = %L', p_uid)
+      INTO v_email;
+  ELSIF EXISTS (SELECT 1 FROM pg_attribute
+                WHERE attrelid = 'auth.users'::regclass
+                  AND attname = 'email'
+                  AND NOT attisdropped) THEN
+    EXECUTE format('SELECT lower(email) FROM auth.users WHERE id = %L', p_uid)
+      INTO v_email;
+  ELSE
+    RETURN NULL;
+  END IF;
+
+  RETURN v_email;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.auth_user_email(uuid) TO authenticated;
+
+-- ------------------------------------------------------------
 -- 1) Helper: current user's role (by auth uid, falling back to email)
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.get_current_user_role()
@@ -45,10 +89,7 @@ AS $$
   WHERE u.id = (SELECT auth.uid())
      OR (
        u.email IS NOT NULL
-       AND lower(u.email) = lower(coalesce(
-             (SELECT raw_email FROM auth.users WHERE id = (SELECT auth.uid())),
-             ''
-           ))
+       AND lower(u.email) = coalesce(public.auth_user_email((SELECT auth.uid())), '')
        AND (SELECT auth.uid()) IS NOT NULL
      )
   LIMIT 1;
