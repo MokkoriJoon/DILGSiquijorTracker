@@ -18,7 +18,7 @@ export default function FloatingFilterIndicator() {
     label: string;
     icon: string;
     options: string[];
-    color: 'blue' | 'purple' | 'green' | 'orange';
+    color: 'blue' | 'purple';
   }> = {
     statusFilter: {
       label: 'Status',
@@ -32,21 +32,9 @@ export default function FloatingFilterIndicator() {
       options: ['DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY', 'SEMESTER', 'YEARLY', 'ONCE'],
       color: 'purple',
     },
-    categoryFilter: {
-      label: 'Category',
-      icon: '📁',
-      options: ['Reporting', 'LGU Compliance', 'Barangay Governance', 'Peace & Order', 'Disaster Preparedness', 'Capacity Building', 'Finance & Budget', 'Administration', 'Field Operations', 'Performance Review'],
-      color: 'green',
-    },
-    departmentFilter: {
-      label: 'Department',
-      icon: '🏢',
-      options: ['DILG Siquijor Provincial Office', 'Municipality of Siquijor', 'Municipality of Larena', 'Municipality of San Juan', 'Municipality of Enrique Villanueva', 'Municipality of Maria', 'Municipality of Lazi'],
-      color: 'orange',
-    },
   };
 
-  const getColorClasses = (color: 'blue' | 'purple' | 'green' | 'orange', isActive: boolean) => {
+  const getColorClasses = (color: 'blue' | 'purple', isActive: boolean) => {
     const colors = {
       blue: {
         active: 'bg-blue-600 text-white border-blue-600',
@@ -55,14 +43,6 @@ export default function FloatingFilterIndicator() {
       purple: {
         active: 'bg-purple-600 text-white border-purple-600',
         inactive: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100',
-      },
-      green: {
-        active: 'bg-green-600 text-white border-green-600',
-        inactive: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100',
-      },
-      orange: {
-        active: 'bg-orange-600 text-white border-orange-600',
-        inactive: 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100',
       },
     };
     return isActive ? colors[color].active : colors[color].inactive;

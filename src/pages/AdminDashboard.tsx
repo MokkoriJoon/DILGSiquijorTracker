@@ -37,6 +37,13 @@ export default function AdminDashboard() {
     loadData();
   }, [dashboardScope, user]);
 
+  // Auto-switch to Kanban view when status or recurrence filters are applied
+  useEffect(() => {
+    if (statusFilter || recurrenceFilter) {
+      setViewMode('kanban');
+    }
+  }, [statusFilter, recurrenceFilter]);
+
   async function loadData() {
     setLoading(true);
     setStatusFilter(null); // Reset filter when changing scope
