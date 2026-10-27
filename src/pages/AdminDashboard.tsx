@@ -24,6 +24,7 @@ export default function AdminDashboard() {
   const [instances, setInstances] = useState<TaskInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [recurrenceFilter, setRecurrenceFilter] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -97,6 +98,41 @@ export default function AdminDashboard() {
       name: name.replace('Regional Office - ', '').replace('Municipality of ', ''),
       completionRate: data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0,
     }));
+  };
+
+  // Get tasks by recurrence type with status breakdown
+  const getTasksByRecurrence = (recurrenceType: string) => {
+    const tasks = instances.filter(task => 
+      task.template?.recurrence === recurrenceType
+    );
+
+    const completed = tasks.filter(t => t.status === 'COMPLETED').length;
+    const pending = tasks.filter(t => 
+      t.status === 'PENDING' || 
+      t.status === 'IN_PROGRESS' || 
+      t.status === 'SUBMITTED'
+    ).length;
+    const overdue = tasks.filter(t => t.status === 'OVERDUE').length;
+
+    return {
+      tasks,
+      stats: {
+        total: tasks.length,
+        completed,
+        pending,
+        overdue
+      }
+    };
+  };
+
+  // Get all recurrence types with their stats
+  const getRecurrenceStats = () => {
+    const recurrenceTypes = ['DAILY', 'WEEKLY', 'MONTHLY', 'QUARTERLY', 'SEMESTER', 'YEARLY', 'ONCE'];
+    
+    return recurrenceTypes.map(type => ({
+      type,
+      ...getTasksByRecurrence(type)
+    })).filter(r => r.stats.total > 0); // Only show recurrence types that have tasks
   };
 
   if (loading) {
@@ -201,6 +237,82 @@ export default function AdminDashboard() {
           </div>
         ))}
       </div>
+
+      {/* Recurrence Category Filters */}
+      {getRecurrenceStats().length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
+          <h3 className="text-base font-semibold text-slate-800 mb-4">Tasks by Recurrence</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {getRecurrenceStats().map((recurrence) => {
+              const config = {
+                'DAILY': { icon: '🔄', color: 'bg-blue-50 border-blue-200', label: 'Daily' },
+                'WEEKLY': { icon: '📅', color: 'bg-purple-50 border-purple-200', label: 'Weekly' },
+                'MONTHLY': { icon: '🗓️', color: 'bg-green-50 border-green-200', label: 'Monthly' },
+                'QUARTERLY': { icon: '📊', color: 'bg-orange-50 border-orange-200', label: 'Quarterly' },
+                'SEMESTER': { icon: '📆', color: 'bg-indigo-50 border-indigo-200', label: 'Semester' },
+                'YEARLY': { icon: '🎯', color: 'bg-red-50 border-red-200', label: 'Yearly' },
+                'ONCE': { icon: '📌', color: 'bg-slate-50 border-slate-200', label: 'One-time' },
+              }[recurrence.type] || { icon: '📋', color: 'bg-slate-50 border-slate-200', label: recurrence.type };
+
+              return (
+                <div 
+                  key={recurrence.type}
+                  onClick={() => setRecurrenceFilter(recurrenceFilter === recurrence.type ? null : recurrence.type)}
+                  className={`border-2 rounded-lg p-4 cursor-pointer transition-all hover:shadow-md ${config.color} ${
+                    recurrenceFilter === recurrence.type ? 'ring-2 ring-blue-500' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-2xl">{config.icon}</span>
+                    <h4 className="text-sm font-bold text-slate-800">{config.label}</h4>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-600">Total:</span>
+                      <span className="font-bold text-slate-800">{recurrence.stats.total}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-emerald-600">✓ Completed:</span>
+                      <span className="font-bold text-emerald-700">{recurrence.stats.completed}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-amber-600">⏳ Pending:</span>
+                      <span className="font-bold text-amber-700">{recurrence.stats.pending}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-red-600">⚠️ Overdue:</span>
+                      <span className="font-bold text-red-700">{recurrence.stats.overdue}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-slate-200">
+                    <p className="text-xs text-slate-500 text-center">
+                      {recurrenceFilter === recurrence.type ? 'Click to deselect' : 'Click to view tasks'}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {recurrenceFilter && (
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-blue-800">
+                  <span className="font-semibold">Viewing:</span> {recurrenceFilter} tasks ({getTasksByRecurrence(recurrenceFilter).stats.total} total)
+                </p>
+                <button
+                  onClick={() => setRecurrenceFilter(null)}
+                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition-colors"
+                >
+                  Clear Filter
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {viewMode === 'stats' ? (
         <>
@@ -307,17 +419,27 @@ export default function AdminDashboard() {
       ) : (
         /* Kanban Board */
         <div className="overflow-x-auto">
-          {statusFilter && (
-            <div className="mb-4 flex items-center gap-2">
+          {(statusFilter || recurrenceFilter) && (
+            <div className="mb-4 flex items-center gap-2 flex-wrap">
               <span className="text-sm text-slate-600">Filtered by:</span>
-              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
-                {statusFilter}
-              </span>
+              {statusFilter && statusFilter !== 'ALL' && (
+                <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
+                  Status: {statusFilter}
+                </span>
+              )}
+              {recurrenceFilter && (
+                <span className="px-3 py-1 bg-purple-100 text-purple-700 text-sm font-medium rounded-full">
+                  Recurrence: {recurrenceFilter}
+                </span>
+              )}
               <button
-                onClick={() => setStatusFilter(null)}
+                onClick={() => {
+                  setStatusFilter(null);
+                  setRecurrenceFilter(null);
+                }}
                 className="text-sm text-slate-500 hover:text-slate-700 underline"
               >
-                Clear filter
+                Clear all filters
               </button>
             </div>
           )}
@@ -326,6 +448,10 @@ export default function AdminDashboard() {
               .filter(column => !statusFilter || statusFilter === 'ALL' || column.status === statusFilter)
               .map((column) => {
                 const tasks = instances.filter(t => {
+                  // Apply recurrence filter if set
+                  if (recurrenceFilter && t.template?.recurrence !== recurrenceFilter) {
+                    return false;
+                  }
                   // Merge IN_PROGRESS and SUBMITTED into PENDING for display
                   if (column.status === 'PENDING') {
                     return t.status === 'PENDING' || t.status === 'IN_PROGRESS' || t.status === 'SUBMITTED';

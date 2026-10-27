@@ -14,6 +14,7 @@ import SchedulerDebug from './pages/SchedulerDebug';
 import Profile from './pages/Profile';
 import TaskCategories from './pages/TaskCategories';
 import ResourceLinks from './pages/ResourceLinks';
+import SiteSettings from './pages/SiteSettings';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { user, loading } = useAuth();
@@ -100,6 +101,11 @@ function AppRoutes() {
       <Route path="/resource-links" element={
         <ProtectedRoute>
           <ResourceLinks />
+        </ProtectedRoute>
+      } />
+      <Route path="/site-settings" element={
+        <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+          <SiteSettings />
         </ProtectedRoute>
       } />
       
