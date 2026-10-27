@@ -1,22 +1,28 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSiteSettings } from '../context/SiteSettingsContext';
-import { Building2, Shield, Eye, EyeOff, ArrowLeft, AlertCircle } from 'lucide-react';
+import { AuthService } from '../services/auth';
+import { Building2, Shield, Eye, EyeOff, ArrowLeft, AlertCircle, KeyRound, CheckCircle } from 'lucide-react';
 
 export default function Login() {
   const { settings } = useSiteSettings();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+  const [recovering, setRecovering] = useState(searchParams.get('recover') === '1');
+  const [sendingRecovery, setSendingRecovery] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
 
     try {
@@ -30,6 +36,23 @@ export default function Login() {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    setSendingRecovery(true);
+    try {
+      const res = await AuthService.requestPasswordRecovery(email);
+      if (res.success) {
+        setNotice(`Recovery email sent to ${email.trim().toLowerCase()}. Open the link to choose a new password.`);
+      } else {
+        setError(res.error || 'Could not send recovery email.');
+      }
+    } finally {
+      setSendingRecovery(false);
     }
   };
 
@@ -73,6 +96,60 @@ export default function Login() {
             </div>
           )}
 
+          {notice && (
+            <div className="flex items-center gap-2 p-3 mb-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-sm">
+              <CheckCircle className="w-4 h-4 flex-shrink-0" />
+              {notice}
+            </div>
+          )}
+
+          {recovering ? (
+            <form onSubmit={handleRecovery} className="space-y-4">
+              <div className="flex items-center gap-2 text-slate-700 font-semibold text-sm">
+                <KeyRound className="w-4 h-4 text-blue-600" />
+                Recover your password
+              </div>
+              <p className="text-xs text-slate-500">
+                Enter the email you registered with. Supabase will send a secure link to choose a new
+                password. If your account predates the current login system, ask a Super Admin to use
+                “Repair Auth” on your account first.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+                  placeholder="your.email@dilg.gov.ph"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={sendingRecovery || !email.trim()}
+                className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {sendingRecovery ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <KeyRound className="w-4 h-4" />
+                    Send Recovery Email
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setRecovering(false); setError(''); setNotice(''); }}
+                className="w-full text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                ← Back to Sign In
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -111,6 +188,19 @@ export default function Login() {
               </div>
             </div>
 
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => { setRecovering(true); setError(''); setNotice(''); }}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+              >
+                Forgot your password?
+              </button>
+              <Link to="/register" className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+                Need an account? Register
+              </Link>
+            </div>
+
             <button
               type="submit"
               disabled={loading}
@@ -126,11 +216,16 @@ export default function Login() {
               )}
             </button>
           </form>
+          )}
 
           {/* Contact admin message */}
           <div className="mt-6 text-center">
             <p className="text-sm text-slate-600">
-              Don't have an account? <span className="font-medium">Contact the Admin</span>
+              Don't have an account?{' '}
+              <Link to="/register" className="font-medium text-blue-600 hover:text-blue-700">
+                Register
+              </Link>{' '}
+              or contact the Admin
             </p>
           </div>
         </div>
