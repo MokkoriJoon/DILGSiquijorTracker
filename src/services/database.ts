@@ -860,6 +860,13 @@ export const DatabaseService = {
     // auth.uid()) cannot be done through RLS with the anon key, and removing
     // the Supabase Auth account requires the service role. Both are handled
     // server-side by /api/admin-delete-user (see api/admin-delete-user.ts).
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || ''))) {
+      return {
+        success: false,
+        error: `The selected account has an invalid id ("${id}"). Reload the user list and try again.`,
+      };
+    }
+
     const endpointHit = await this.callAdminEndpoint('/api/admin-delete-user', { id });
     if (endpointHit.ok && endpointHit.result?.success) {
       return { success: true };
@@ -871,11 +878,16 @@ export const DatabaseService = {
       // The endpoint IS deployed — report its real error instead of silently
       // falling through to an anon-key delete that RLS will block anyway.
       console.error('[DB] Admin delete endpoint failed:', endpointHit.result);
+      const detail = endpointHit.result?.error
+        || endpointHit.result?.message
+        || (typeof endpointHit.result === 'string' ? endpointHit.result.slice(0, 300) : '');
       return {
         success: false,
         error:
-          endpointHit.result?.error ||
-          `The delete endpoint returned HTTP ${endpointHit.status}. Check the Vercel function logs for /api/admin-delete-user.`,
+          detail ||
+          `The delete endpoint returned HTTP ${endpointHit.status} with no error message. ` +
+          'Check the Vercel function logs for /api/admin-delete-user, and run ' +
+          'FIX_USER_DELETE_FOREIGN_KEYS.sql in the Supabase SQL Editor.',
       };
     } else {
       console.warn('[DB] Admin delete endpoint unreachable:', endpointHit.networkError);
