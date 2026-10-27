@@ -78,7 +78,61 @@ export default function PublicDashboard() {
     }));
   };
 
-  // Get upcoming tasks (due within next 7 days) grouped by recurrence
+  // Get OVERDUE tasks (for urgent display)
+  const getOverdueTasks = () => {
+    const overdueTasks = instances.filter(task => task.status === 'OVERDUE');
+    
+    // Deduplicate by template
+    const uniqueTemplates = new Map<string, TaskInstance[]>();
+    overdueTasks.forEach(task => {
+      if (task.template) {
+        if (!uniqueTemplates.has(task.template.id)) {
+          uniqueTemplates.set(task.template.id, []);
+        }
+        uniqueTemplates.get(task.template.id)!.push(task);
+      }
+    });
+
+    return Array.from(uniqueTemplates.entries()).map(([templateId, assignees]) => ({
+      template: assignees[0].template,
+      assignees: assignees
+    }));
+  };
+
+  // Get tasks due TODAY or TOMORROW (urgent reminders)
+  const getUrgentTasks = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const urgentTasks = instances.filter(task => {
+      const dueDate = new Date(task.dueDate);
+      dueDate.setHours(0, 0, 0, 0);
+      // Exclude overdue tasks (they're shown separately)
+      if (task.status === 'OVERDUE') return false;
+      // Include tasks due today or tomorrow
+      return dueDate.getTime() === today.getTime() || dueDate.getTime() === tomorrow.getTime();
+    });
+
+    // Deduplicate by template
+    const uniqueTemplates = new Map<string, TaskInstance[]>();
+    urgentTasks.forEach(task => {
+      if (task.template) {
+        if (!uniqueTemplates.has(task.template.id)) {
+          uniqueTemplates.set(task.template.id, []);
+        }
+        uniqueTemplates.get(task.template.id)!.push(task);
+      }
+    });
+
+    return Array.from(uniqueTemplates.entries()).map(([templateId, assignees]) => ({
+      template: assignees[0].template,
+      assignees: assignees
+    }));
+  };
+
+  // Get upcoming tasks (due within next 7 days, excluding overdue) grouped by recurrence
   const getUpcomingTasksByRecurrence = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -88,6 +142,8 @@ export default function PublicDashboard() {
     const upcomingTasks = instances.filter(task => {
       const dueDate = new Date(task.dueDate);
       dueDate.setHours(0, 0, 0, 0);
+      // Exclude overdue tasks (they're shown separately)
+      if (task.status === 'OVERDUE') return false;
       return dueDate >= today && dueDate <= sevenDaysFromNow;
     });
 
@@ -187,6 +243,199 @@ export default function PublicDashboard() {
             </p>
           </div>
         </div>
+
+        {/* OVERDUE Tasks - Urgent Alert Section */}
+        {(() => {
+          const overdueTasks = getOverdueTasks();
+          if (overdueTasks.length === 0) return null;
+
+          return (
+            <div className="mb-6">
+              <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                  <h3 className="text-lg font-bold text-red-800">
+                    ⚠️ OVERDUE Tasks ({overdueTasks.length})
+                  </h3>
+                </div>
+                <div className="space-y-2">
+                  {overdueTasks.map((taskData) => {
+                    const { template, assignees } = taskData;
+                    return (
+                      <div key={template.id} className="bg-white rounded-lg p-3 border-2 border-red-200">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-red-900 truncate">
+                              {template.title}
+                            </p>
+                            <p className="text-xs text-red-700 mt-0.5">
+                              {template.category} • {template.recurrence}
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {assignees.slice(0, 5).map((assignee, idx) => (
+                                <span 
+                                  key={idx}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-800 text-xs rounded-full border border-red-300"
+                                >
+                                  <div className="w-4 h-4 bg-red-200 rounded-full flex items-center justify-center">
+                                    <span className="text-[8px] font-bold text-red-900">
+                                      {assignee.assignee?.name ? formatName(assignee.assignee.name).charAt(0) : '?'}
+                                    </span>
+                                  </div>
+                                  {assignee.assignee?.name ? formatName(assignee.assignee.name) : 'Unassigned'}
+                                  <span className="text-red-600 font-semibold">(Due: {assignee.dueDate})</span>
+                                </span>
+                              ))}
+                              {assignees.length > 5 && (
+                                <span className="text-xs text-red-600 font-semibold">
+                                  +{assignees.length - 5} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* URGENT Tasks - Due Today or Tomorrow */}
+        {(() => {
+          const urgentTasks = getUrgentTasks();
+          if (urgentTasks.length === 0) return null;
+
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const tomorrow = new Date(today);
+          tomorrow.setDate(today.getDate() + 1);
+
+          const tasksDueToday = urgentTasks.filter(t => {
+            const dueDate = new Date(t.assignees[0].dueDate);
+            dueDate.setHours(0, 0, 0, 0);
+            return dueDate.getTime() === today.getTime();
+          });
+
+          const tasksDueTomorrow = urgentTasks.filter(t => {
+            const dueDate = new Date(t.assignees[0].dueDate);
+            dueDate.setHours(0, 0, 0, 0);
+            return dueDate.getTime() === tomorrow.getTime();
+          });
+
+          return (
+            <div className="mb-6">
+              <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Clock className="w-6 h-6 text-amber-600" />
+                  <h3 className="text-lg font-bold text-amber-800">
+                    ⏰ URGENT Tasks Due Soon ({urgentTasks.length})
+                  </h3>
+                </div>
+
+                {/* Tasks Due Today */}
+                {tasksDueToday.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-sm font-bold text-amber-900 mb-2">
+                      📅 Due TODAY ({tasksDueToday.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {tasksDueToday.map((taskData) => {
+                        const { template, assignees } = taskData;
+                        return (
+                          <div key={template.id} className="bg-white rounded-lg p-3 border-2 border-amber-200">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-amber-900 truncate">
+                                  {template.title}
+                                </p>
+                                <p className="text-xs text-amber-700 mt-0.5">
+                                  {template.category} • {template.recurrence}
+                                  {template.dueTime && <span className="ml-2 font-semibold">at {template.dueTime}</span>}
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {assignees.slice(0, 5).map((assignee, idx) => (
+                                    <span 
+                                      key={idx}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-800 text-xs rounded-full border border-amber-300"
+                                    >
+                                      <div className="w-4 h-4 bg-amber-200 rounded-full flex items-center justify-center">
+                                        <span className="text-[8px] font-bold text-amber-900">
+                                          {assignee.assignee?.name ? formatName(assignee.assignee.name).charAt(0) : '?'}
+                                        </span>
+                                      </div>
+                                      {assignee.assignee?.name ? formatName(assignee.assignee.name) : 'Unassigned'}
+                                    </span>
+                                  ))}
+                                  {assignees.length > 5 && (
+                                    <span className="text-xs text-amber-600 font-semibold">
+                                      +{assignees.length - 5} more
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tasks Due Tomorrow */}
+                {tasksDueTomorrow.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-900 mb-2">
+                      📅 Due TOMORROW ({tasksDueTomorrow.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {tasksDueTomorrow.map((taskData) => {
+                        const { template, assignees } = taskData;
+                        return (
+                          <div key={template.id} className="bg-white rounded-lg p-3 border-2 border-amber-200">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-amber-900 truncate">
+                                  {template.title}
+                                </p>
+                                <p className="text-xs text-amber-700 mt-0.5">
+                                  {template.category} • {template.recurrence}
+                                  {template.dueTime && <span className="ml-2 font-semibold">at {template.dueTime}</span>}
+                                </p>
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {assignees.slice(0, 5).map((assignee, idx) => (
+                                    <span 
+                                      key={idx}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-800 text-xs rounded-full border border-amber-300"
+                                    >
+                                      <div className="w-4 h-4 bg-amber-200 rounded-full flex items-center justify-center">
+                                        <span className="text-[8px] font-bold text-amber-900">
+                                          {assignee.assignee?.name ? formatName(assignee.assignee.name).charAt(0) : '?'}
+                                        </span>
+                                      </div>
+                                      {assignee.assignee?.name ? formatName(assignee.assignee.name) : 'Unassigned'}
+                                    </span>
+                                  ))}
+                                  {assignees.length > 5 && (
+                                    <span className="text-xs text-amber-600 font-semibold">
+                                      +{assignees.length - 5} more
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Stats Cards - Clickable */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
