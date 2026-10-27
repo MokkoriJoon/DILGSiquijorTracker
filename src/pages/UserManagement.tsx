@@ -15,6 +15,8 @@ export default function UserManagement() {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<any>(null);
   const [deleteError, setDeleteError] = useState('');
+  const [resetMessage, setResetMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [resetting, setResetting] = useState(false);
   // Map of userId -> true when a matching auth.users account exists.
   const [authStatus, setAuthStatus] = useState<Record<string, boolean>>({});
   const [repairingId, setRepairingId] = useState<string | null>(null);
@@ -110,6 +112,63 @@ export default function UserManagement() {
     u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  /**
+   * Clean-slate rebuild: deletes EVERY account (profiles, related rows and all
+   * Supabase Auth users) and re-creates the Super Admin automatically, so the
+   * team can be rebuilt in order: SUPERADMIN first → ADMINs → STANDARD users.
+   */
+  const handleResetAll = async () => {
+    setResetMessage(null);
+    if (!currentUser || currentUser.role !== 'SUPER_ADMIN') {
+      setResetMessage({ type: 'error', text: 'Only Super Admins can reset all accounts.' });
+      return;
+    }
+    if (!window.confirm(
+      'RESET ALL ACCOUNTS?\n\n' +
+      'This DELETES every user account (Super Admins, Admins, Standard users), ' +
+      'all their tasks, assignments, notifications and bookmarks, and every Supabase Auth login.\n\n' +
+      'A fresh Super Admin will be re-created automatically:\n' +
+      `  ${currentUser.email} (your current Super Admin email)\n` +
+      'with the system default password configured on the server (api/admin-reset-users.ts).\n\n' +
+      'Afterwards, rebuild in this order: create ADMINs in User Management, then let STANDARD users register.\n\n' +
+      'This cannot be undone. Continue?'
+    )) {
+      return;
+    }
+    // Second, typed confirmation — accidents here are catastrophic.
+    const phrase = window.prompt('Type RESET to confirm wiping all accounts:');
+    if (!phrase || phrase.trim().toUpperCase() !== 'RESET') {
+      return;
+    }
+
+    setResetting(true);
+    try {
+      const result = await UserService.resetAll({
+        superAdminEmail: currentUser.email,
+        superAdminName: currentUser.name,
+        superAdminDepartment: currentUser.department,
+      });
+      if (result.success) {
+        const sa = result.result?.superAdmin;
+        setResetMessage({
+          type: 'success',
+          text:
+            `All accounts were wiped (${result.result?.deletedAuthUsers ?? 0} auth users removed). ` +
+            `A fresh Super Admin was created for ${sa?.email}. Sign out and sign back in to continue ` +
+            'rebuilding: add Admins first, then have Standard users register.',
+        });
+        setTimeout(() => { window.location.href = '/login'; }, 4000);
+      } else {
+        setResetMessage({
+          type: 'error',
+          text: `${result.error}${result.warning ? `\n\n${result.warning}` : ''}`,
+        });
+      }
+    } finally {
+      setResetting(false);
+    }
+  };
 
   // Role-based permissions: Super Admins can delete anyone except themselves;
   // Admins cannot delete Super Admins (or themselves).

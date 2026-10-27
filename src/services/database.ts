@@ -965,6 +965,67 @@ export const DatabaseService = {
   },
 
   /**
+   * Full clean-slate reset: deletes ALL accounts (public.users profiles, every
+   * related row, and every Supabase Auth user) and re-creates one guaranteed
+   * Super Admin so the login/registration system can be rebuilt from scratch:
+   * Super Admin first, then Admins, then Standard users.
+   *
+   * Handled server-side by /api/admin-reset-users (service role key). Only a
+   * verified SUPER_ADMIN caller with { confirm: "RESET" } is accepted.
+   */
+  async resetAllUsers(overrides?: {
+    superAdminEmail?: string;
+    superAdminPassword?: string;
+    superAdminName?: string;
+    superAdminDepartment?: string;
+  }): Promise<{
+    success: boolean;
+    error?: string;
+    warning?: string;
+    result?: any;
+  }> {
+    const hit = await this.callAdminEndpoint('/api/admin-reset-users', {
+      confirm: 'RESET',
+      ...(overrides || {}),
+    });
+
+    if (hit.ok && hit.result?.success) {
+      // Drop our own stale session/storage — our old auth user no longer
+      // exists after the wipe. The app will bounce to the login screen.
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        /* ignore */
+      }
+      sessionStorage.removeItem('dilg_current_user');
+      return { success: true, result: hit.result };
+    }
+
+    if (hit.status === 404) {
+      return {
+        success: false,
+        error:
+          'Reset endpoint not deployed yet. Deploy api/admin-reset-users.ts to Vercel ' +
+          '(with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY set), then try again.',
+      };
+    }
+    if (hit.status !== 0) {
+      return {
+        success: false,
+        error:
+          hit.result?.error ||
+          hit.result?.message ||
+          `The reset endpoint returned HTTP ${hit.status}. Check the Vercel function logs for /api/admin-reset-users.`,
+        warning: hit.result?.warning,
+      };
+    }
+    return {
+      success: false,
+      error: `Could not reach /api/admin-reset-users (${hit.networkError || 'network error'}).`,
+    };
+  },
+
+  /**
    * Repair a legacy user's Supabase Auth account WITHOUT deleting anything.
    *
    * "Old users" (created before Supabase Auth was wired up) have no matching
@@ -1111,6 +1172,12 @@ export const UserService = {
   },
   delete: (id: string) => DatabaseService.deleteUser(id),
   repairAuth: (id: string) => DatabaseService.repairUserAuth(id),
+  resetAll: (overrides?: {
+    superAdminEmail?: string;
+    superAdminPassword?: string;
+    superAdminName?: string;
+    superAdminDepartment?: string;
+  }) => DatabaseService.resetAllUsers(overrides),
 };
 
 // Reset function (clears all data - use with caution)

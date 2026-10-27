@@ -23,9 +23,10 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [replaceExisting, setReplaceExisting] = useState(false);
 
   useEffect(() => {
-    // Check if this is the first user in Supabase (will become admin)
+    // Check if this is the first user in Supabase (will become Super Admin)
     checkFirstUser();
   }, []);
 
@@ -37,9 +38,20 @@ export default function Register() {
       
       if (error) {
         console.error('[Register] Error checking first user:', JSON.stringify(error));
-        // If RLS is blocking, assume first user (will show admin message)
+        // If RLS is blocking, ask the serverless bootstrap status endpoint
+        // (service role key) instead of guessing — it only returns aggregates.
         if (error.code === '42501' || error.code === 'PGRST301' || !error.message) {
-          console.warn('[Register] RLS may be blocking. Assuming first user.');
+          try {
+            const res = await fetch('/api/admin-bootstrap-status');
+            if (res.ok) {
+              const j = await res.json();
+              setIsFirstUser(Number(j.userCount ?? 0) === 0);
+              return;
+            }
+          } catch {
+            /* endpoint not deployed yet */
+          }
+          console.warn('[Register] Could not determine user count. Assuming first user.');
           setIsFirstUser(true);
         }
         return;
@@ -93,18 +105,36 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // Register user - all new users are STANDARD, first user automatically becomes ADMIN
-      const result = await register(
+      // Role tiering: first-ever account becomes SUPER_ADMIN, everyone else
+      // registers as STANDARD. Admins are created/promoted by a Super Admin
+      // in User Management — never self-registered.
+      let result = await register(
         formData.email,
         formData.password,
         formData.name,
         formData.department
       );
 
+      // "Delete existing to replace new": if the email is already taken by the
+      // caller's own (signed-in) standard account, offer to wipe & re-create it.
+      if (
+        !result.success &&
+        /already exists/i.test(result.error || '') &&
+        !replaceExisting
+      ) {
+        setReplaceExisting(true);
+        setError(
+          (result.error || 'An account with this email already exists.') +
+            ' Tick "Replace my existing account" below and press Create Account again to delete it and start fresh.'
+        );
+        setLoading(false);
+        return;
+      }
+
       if (result.success) {
         if (isFirstUser) {
-          // First admin - show welcome message and redirect to dashboard
-          navigate('/dashboard?welcome=admin');
+          // First Super Admin - show welcome message and redirect to dashboard
+          navigate('/dashboard?welcome=superadmin');
         } else {
           navigate('/dashboard');
         }
@@ -255,10 +285,11 @@ export default function Register() {
                 <div className="flex items-start gap-3">
                   <Shield className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-semibold text-amber-800">First Admin Account</p>
+                    <p className="text-sm font-semibold text-amber-800">First Super Admin Account</p>
                     <p className="text-xs text-amber-700 mt-1">
-                      You're setting up the system! This account will automatically be assigned the <strong>Admin</strong> role 
-                      with full system access. After registration, you can create additional user accounts.
+                      You're setting up the system! This account will automatically be assigned the{' '}
+                      <strong>Super Admin</strong> role with full system access. After this, create
+                      <strong> Admin</strong> accounts from User Management, then register standard users.
                     </p>
                   </div>
                 </div>
@@ -266,10 +297,27 @@ export default function Register() {
             ) : (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-xs text-blue-700">
-                  <strong>Note:</strong> All new accounts are created as <strong>Standard Users</strong>. 
-                  Admins can upgrade user roles from the User Management page.
+                  <strong>Note:</strong> All new accounts are created as <strong>Standard Users</strong>.
+                  A Super Admin can upgrade trusted accounts to <strong>Admin</strong> from the
+                  User Management page.
                 </p>
               </div>
+            )}
+
+            {replaceExisting && (
+              <label className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={replaceExisting}
+                  onChange={(e) => setReplaceExisting(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 text-red-600 border-red-300 rounded focus:ring-red-500"
+                />
+                <span className="text-xs text-red-700">
+                  <strong>Replace my existing account.</strong> Deletes the current Standard-user
+                  profile for this email (tasks, bookmarks and notifications included) and creates a
+                  fresh account with the details above.
+                </span>
+              </label>
             )}
 
             <button
@@ -288,12 +336,19 @@ export default function Register() {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-1">
             <p className="text-sm text-slate-600">
               Already have an account?{' '}
               <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">
                 Sign in
               </Link>
+            </p>
+            <p className="text-xs text-slate-500">
+              Forgot your password?{' '}
+              <Link to="/login?recover=1" className="text-blue-600 hover:text-blue-700 font-medium">
+                Recover it on the sign-in page
+              </Link>{' '}
+              or contact your Admin.
             </p>
           </div>
         </div>
