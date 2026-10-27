@@ -6,9 +6,7 @@ export default function FloatingFilterIndicator() {
   const { filters, clearFilter, clearAllFilters, activeFiltersCount } = useFilters();
   const [isExpanded, setIsExpanded] = useState(false);
 
-  if (activeFiltersCount === 0) {
-    return null;
-  }
+  // Always show the floating filter button
 
   const filterLabels: Record<string, string> = {
     statusFilter: 'Status',
@@ -43,50 +41,69 @@ export default function FloatingFilterIndicator() {
       {/* Expanded Filter Panel */}
       {isExpanded && (
         <div className="bg-white rounded-lg shadow-2xl border border-gray-200 p-4 max-w-xs w-full mb-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200">
             <h3 className="text-sm font-semibold text-gray-900">Active Filters</h3>
-            <button
-              onClick={clearAllFilters}
-              className="text-xs text-red-600 hover:text-red-700 font-medium"
-            >
-              Clear All
-            </button>
+            {activeFiltersCount > 0 && (
+              <button
+                onClick={clearAllFilters}
+                className="text-xs text-red-600 hover:text-red-700 font-medium"
+              >
+                Clear All
+              </button>
+            )}
           </div>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {Object.entries(filters).map(([key, value]) => {
-              if (value === null || value === '') return null;
-              
-              return (
-                <div
-                  key={key}
-                  className={`flex items-center justify-between px-3 py-2 rounded-md border ${getFilterColor(key)}`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium opacity-75">{filterLabels[key]}</p>
-                    <p className="text-sm font-semibold truncate">{value}</p>
-                  </div>
-                  <button
-                    onClick={() => clearFilter(key as keyof typeof filters)}
-                    className="ml-2 p-1 hover:bg-white/50 rounded transition-colors"
-                    aria-label={`Clear ${filterLabels[key]} filter`}
+          {activeFiltersCount === 0 ? (
+            <div className="py-6 text-center">
+              <Filter className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <p className="text-sm text-gray-500">No active filters</p>
+              <p className="text-xs text-gray-400 mt-1">Use filters on any page to see them here</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {Object.entries(filters).map(([key, value]) => {
+                if (value === null || value === '') return null;
+                
+                return (
+                  <div
+                    key={key}
+                    className={`flex items-center justify-between px-3 py-2 rounded-md border ${getFilterColor(key)}`}
                   >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium opacity-75">{filterLabels[key]}</p>
+                      <p className="text-sm font-semibold truncate">{value}</p>
+                    </div>
+                    <button
+                      onClick={() => clearFilter(key as keyof typeof filters)}
+                      className="ml-2 p-1 hover:bg-white/50 rounded transition-colors"
+                      aria-label={`Clear ${filterLabels[key]} filter`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Floating Button */}
+      {/* Floating Button - Always Visible */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg p-3 flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
+        className={`shadow-lg px-4 py-3 flex items-center gap-2 transition-all hover:scale-105 active:scale-95 rounded-full ${
+          activeFiltersCount > 0
+            ? 'bg-blue-600 hover:bg-blue-700 text-white'
+            : 'bg-slate-600 hover:bg-slate-700 text-white'
+        }`}
         aria-label="Toggle filter panel"
       >
         <Filter className="w-5 h-5" />
-        <span className="text-sm font-semibold">{activeFiltersCount}</span>
+        <span className="text-sm font-semibold">Filter</span>
+        {activeFiltersCount > 0 && (
+          <span className="bg-white text-blue-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+            {activeFiltersCount}
+          </span>
+        )}
         {isExpanded ? (
           <ChevronDown className="w-4 h-4" />
         ) : (

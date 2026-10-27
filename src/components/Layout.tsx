@@ -114,16 +114,16 @@ export default function Layout({ children }: LayoutProps) {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-all duration-200 ${
+                className={`flex items-start gap-3 px-4 py-3 rounded-lg mb-1 transition-all duration-200 ${
                   isActive
                     ? 'bg-blue-800 text-white shadow-lg shadow-blue-900/50'
                     : 'text-blue-200 hover:bg-blue-800/50 hover:text-white'
                 }`}
                 onClick={() => setSidebarOpen(false)}
               >
-                <item.icon className="w-5 h-5" />
-                <span className="text-sm font-medium">{item.label}</span>
-                {isActive && <ChevronRight className="w-4 h-4 ml-auto" />}
+                <item.icon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <span className="text-sm font-medium flex-1 break-words leading-tight">{item.label}</span>
+                {isActive && <ChevronRight className="w-4 h-4 flex-shrink-0 mt-0.5" />}
               </Link>
             );
           })}
