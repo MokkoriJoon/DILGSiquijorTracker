@@ -297,6 +297,7 @@ function CreateTaskModal({ users, currentUser, onClose, onCreated }: CreateTaskM
         description,
         recurrence,
         dueDay: recurrence !== 'ONCE' && recurrence !== 'DAILY' ? dueDay : undefined,
+        dueDate: recurrence === 'ONCE' ? dueDate : undefined,
         dueDaysOfWeek: recurrence === 'DAILY' ? dueDaysOfWeek as any : undefined,
         dueTime: recurrence === 'DAILY' ? dueTime : undefined,
         startDate: recurrence === 'DAILY' ? startDate : undefined,
@@ -827,6 +828,10 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
   const [priority, setPriority] = useState(task.priority);
   const [recurrence, setRecurrence] = useState(task.recurrence);
   const [dueDay, setDueDay] = useState(task.dueDay || 25);
+  // BUG FIX: the edit form previously had no real due-date state for one-time
+  // tasks (it bound a date input to `dueDay`), so the chosen date was never
+  // loaded or saved. Now we track the full YYYY-MM-DD due date separately.
+  const [dueDate, setDueDate] = useState(task.dueDate || '');
   const [dueDaysOfWeek, setDueDaysOfWeek] = useState<string[]>(task.dueDaysOfWeek || []);
   const [dueTime, setDueTime] = useState(task.dueTime || '17:00');
   const [startDate, setStartDate] = useState(task.startDate || '');
@@ -844,6 +849,14 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
     const instances = await DatabaseService.getInstancesByTemplate(task.id);
     const userIds = instances.map((inst: any) => inst.assignedTo);
     setSelectedUsers(userIds);
+
+    // For one-time tasks created before the due-date fix, the template may not
+    // have a stored date - fall back to the instance's due date so the admin
+    // can actually edit it.
+    if (task.recurrence === 'ONCE' && !task.dueDate && instances.length > 0) {
+      const firstDue = String(instances[0].dueDate || '').split('T')[0];
+      if (firstDue) setDueDate(firstDue);
+    }
   }
 
   const categories = [
@@ -876,6 +889,11 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
       return;
     }
 
+    if (recurrence === 'ONCE' && !dueDate) {
+      setError('Due date is required for one-time tasks');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -886,6 +904,7 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
         description,
         recurrence,
         dueDay: recurrence !== 'ONCE' && recurrence !== 'DAILY' ? dueDay : undefined,
+        dueDate: recurrence === 'ONCE' ? dueDate : undefined,
         dueDaysOfWeek: recurrence === 'DAILY' ? dueDaysOfWeek as any : undefined,
         dueTime: recurrence === 'DAILY' ? dueTime : undefined,
         startDate: recurrence === 'DAILY' ? startDate : undefined,
@@ -1005,8 +1024,8 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Due Date *</label>
                 <input
                   type="date"
-                  value={dueDay.toString()}
-                  onChange={(e) => setDueDay(parseInt(e.target.value) || 25)}
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -1049,7 +1068,6 @@ function EditTaskModal({ task, users, currentUser, onClose, onUpdated }: {
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
-                  min={new Date().toISOString().split('T')[0]}
                 />
                 <p className="text-xs text-slate-500 mt-1">
                   When should this daily recurrence start?

@@ -21,7 +21,8 @@ export interface TaskTemplate {
   title: string;
   description: string;
   recurrence: RecurrenceType;
-  dueDay?: number;
+  dueDay?: number; // For recurring tasks: day of month (1-31)
+  dueDate?: string; // For ONCE (one-time) tasks: full chosen due date (YYYY-MM-DD format)
   dueDaysOfWeek?: DayOfWeek[]; // For DAILY recurrence: which days of the week
   dueTime?: string; // For DAILY recurrence: time of day (HH:MM format)
   startDate?: string; // For DAILY recurrence: when the recurrence starts (YYYY-MM-DD format)

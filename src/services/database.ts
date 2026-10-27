@@ -4,6 +4,30 @@ import { AuthService } from './auth';
 
 // ============ HELPER FUNCTIONS ============
 
+/**
+ * Convert a local "YYYY-MM-DD" date string into a proper UTC ISO timestamp.
+ * IMPORTANT: new Date('YYYY-MM-DD') is parsed as UTC midnight, which shifts the
+ * day backwards for users east of UTC (e.g. Philippines UTC+8). Building the date
+ * with the local-time constructor keeps the exact calendar day the user picked.
+ */
+function toUTCDateInput(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(year, (month || 1) - 1, day || 1)).toISOString();
+}
+
+/**
+ * Get today's date in the user's LOCAL timezone as YYYY-MM-DD.
+ * (toISOString() uses UTC and can return yesterday/tomorrow depending on the
+ * user's timezone offset.)
+ */
+function getLocalTodayString(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function calculateNextDueDate(recurrence: RecurrenceType, dueDay: number): string {
   const now = new Date();
   let target = new Date(now);
@@ -40,15 +64,19 @@ function calculateNextDueDate(recurrence: RecurrenceType, dueDay: number): strin
 // ============ STANDALONE MAPPER FUNCTIONS ============
 
 function mapTemplate(row: any): TaskTemplate {
+  const dueDayRaw = row.due_day;
   return {
     id: row.id,
     title: row.title,
     description: row.description || '',
     recurrence: row.recurrence,
-    dueDay: row.due_day,
+    // For ONCE (one-time) tasks the full due date is stored in due_day as an ISO
+    // timestamp; for recurring tasks due_day is just a day-of-month number.
+    dueDay: typeof dueDayRaw === 'number' ? dueDayRaw : undefined,
+    dueDate: dueDayRaw && String(dueDayRaw).includes('-') ? String(dueDayRaw).split('T')[0] : undefined,
     dueDaysOfWeek: row.due_days_of_week || [],
     dueTime: row.due_time,
-    startDate: row.start_date,
+    startDate: row.start_date ? String(row.start_date).split('T')[0] : undefined,
     category: row.category,
     priority: row.priority,
     resourceLink: row.resource_link,
@@ -99,12 +127,23 @@ export const DatabaseService = {
       title: template.title,
       description: template.description,
       recurrence: template.recurrence,
-      due_day: template.dueDay,
       category: template.category,
       priority: template.priority,
       visible: template.visible !== false, // Default to true
       created_by: template.createdBy,
     };
+
+    // Date handling:
+    // - ONCE tasks store the full chosen due date (as an ISO timestamp so it is
+    //   never truncated to "today") in due_day.
+    // - Recurring tasks store a day-of-month number instead.
+    if (template.recurrence === 'ONCE') {
+      if (template.dueDate) {
+        insertData.due_day = toUTCDateInput(template.dueDate);
+      }
+    } else if (template.dueDay !== undefined) {
+      insertData.due_day = template.dueDay;
+    }
 
     // Add daily recurrence fields if provided
     if (template.recurrence === 'DAILY') {
@@ -115,7 +154,7 @@ export const DatabaseService = {
         insertData.due_time = template.dueTime;
       }
       if (template.startDate) {
-        insertData.start_date = template.startDate;
+        insertData.start_date = toUTCDateInput(template.startDate);
       }
     }
 
@@ -143,7 +182,9 @@ export const DatabaseService = {
             title: template.title,
             description: template.description,
             recurrence: template.recurrence,
-            due_day: template.dueDay,
+            due_day: template.recurrence === 'ONCE' && template.dueDate
+              ? toUTCDateInput(template.dueDate)
+              : template.dueDay,
             category: template.category,
             priority: template.priority,
             created_by: template.createdBy,
@@ -179,10 +220,21 @@ export const DatabaseService = {
     if (updates.title !== undefined) updateData.title = updates.title;
     if (updates.description !== undefined) updateData.description = updates.description;
     if (updates.recurrence !== undefined) updateData.recurrence = updates.recurrence;
-    if (updates.dueDay !== undefined) updateData.due_day = updates.dueDay;
     if (updates.category !== undefined) updateData.category = updates.category;
     if (updates.priority !== undefined) updateData.priority = updates.priority;
     if (updates.resourceLink !== undefined) updateData.resource_link = updates.resourceLink || null;
+
+    // Date handling for due_day:
+    // - ONCE tasks store the full chosen due date as an ISO timestamp in due_day.
+    // - Recurring tasks store a day-of-month number instead.
+    const effectiveRecurrence = updates.recurrence;
+    if (effectiveRecurrence === 'ONCE') {
+      if (updates.dueDate !== undefined && updates.dueDate) {
+        updateData.due_day = toUTCDateInput(updates.dueDate);
+      }
+    } else if (updates.dueDay !== undefined) {
+      updateData.due_day = updates.dueDay;
+    }
     
     // Add daily recurrence fields if provided
     if (updates.dueDaysOfWeek !== undefined) {
@@ -192,7 +244,7 @@ export const DatabaseService = {
       updateData.due_time = updates.dueTime;
     }
     if (updates.startDate !== undefined) {
-      updateData.start_date = updates.startDate;
+      updateData.start_date = updates.startDate ? toUTCDateInput(updates.startDate) : null;
     }
 
     const { data, error } = await supabase
@@ -205,6 +257,22 @@ export const DatabaseService = {
     if (error) {
       console.error('[DB] Error updating template:', error);
       return null;
+    }
+
+    // If this is a one-time task and the due date changed, also update the
+    // due_date of its existing (not yet completed) instances so the change
+    // is reflected everywhere.
+    if (effectiveRecurrence === 'ONCE' && updateData.due_day !== undefined) {
+      const newDueDate = String(updateData.due_day).split('T')[0];
+      const { error: instError } = await supabase
+        .from('task_instances')
+        .update({ due_date: newDueDate })
+        .eq('template_id', id)
+        .neq('status', 'COMPLETED');
+
+      if (instError) {
+        console.error('[DB] Error syncing instance due dates after template update:', instError);
+      }
     }
     
     return mapTemplate(data);
@@ -280,10 +348,14 @@ export const DatabaseService = {
         let dueDate: string;
         
         if (template.recurrence === 'ONCE') {
-          dueDate = new Date().toISOString().split('T')[0];
+          // BUG FIX: previously this used "today" and ignored the chosen due date.
+          // For one-time tasks, due_day stores the full due date (ISO timestamp),
+          // so use that instead of the current date.
+          const mapped = mapTemplate(template);
+          dueDate = mapped.dueDate || getLocalTodayString();
         } else if (template.recurrence === 'DAILY' && template.start_date) {
           // For DAILY tasks, use the start_date
-          dueDate = template.start_date;
+          dueDate = String(template.start_date).split('T')[0];
         } else {
           // For other recurring tasks, calculate next due date
           dueDate = calculateNextDueDate(template.recurrence, template.due_day || 25);
@@ -603,13 +675,60 @@ export const DatabaseService = {
     return { success: true };
   },
 
-  async deleteUser(id: string): Promise<boolean> {
-    const { error } = await supabase
+  async deleteUser(id: string): Promise<{ success: boolean; error?: string }> {
+    // 1) Delete the profile row from the users table (RLS must allow
+    //    SUPER_ADMIN/ADMIN to delete other users - see FIX_USER_DELETE_PERMISSIONS.sql).
+    const { error: userError } = await supabase
       .from('users')
       .delete()
       .eq('id', id);
-    
-    return !error;
+
+    if (userError) {
+      console.error('[DB] Error deleting user:', userError);
+      return { success: false, error: userError.message };
+    }
+
+    // 2) Clean up related data so nothing is left dangling.
+    //    Task instances assigned to this user are removed first (they have a
+    //    foreign key to users), then any explicit assignment rows.
+    const { error: instError } = await supabase
+      .from('task_instances')
+      .delete()
+      .eq('assigned_to', id);
+    if (instError) console.warn('[DB] Could not clean task instances for deleted user:', instError.message);
+
+    const { error: assignError } = await supabase
+      .from('task_assignments')
+      .delete()
+      .eq('user_id', id);
+    if (assignError) console.warn('[DB] Could not clean task assignments for deleted user:', assignError.message);
+
+    const { error: notifError } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('user_id', id);
+    if (notifError) console.warn('[DB] Could not clean notifications for deleted user:', notifError.message);
+
+    const { error: bmError } = await supabase
+      .from('personal_bookmarks')
+      .delete()
+      .eq('user_id', id);
+    if (bmError) console.warn('[DB] Could not clean bookmarks for deleted user:', bmError.message);
+
+    // 3) Also try to remove the Supabase Auth account so the email can be
+    //    reused. This requires the "Delete Users" admin API to be reachable
+    //    with the anon key (Dashboard -> Authentication -> Providers/API settings)
+    //    or a service-role based edge function. Failure here is non-fatal.
+    try {
+      const { error: authError } = await supabase.auth.admin.deleteUser(id);
+      if (authError) {
+        console.warn('[DB] Could not delete auth user (profile was removed):', authError.message);
+      }
+    } catch (e) {
+      console.warn('[DB] Auth user cleanup skipped:', e);
+    }
+
+    return { success: true };
   },
 
   async updateUser(id: string, updates: { name?: string; department?: string; position?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'; password?: string }): Promise<{ success: boolean; error?: string }> {
