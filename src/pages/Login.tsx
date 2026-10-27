@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSiteSettings } from '../context/SiteSettingsContext';
 import { Building2, Shield, Eye, EyeOff, ArrowLeft, AlertCircle } from 'lucide-react';
 
 export default function Login() {
+  const { settings } = useSiteSettings();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -53,11 +55,15 @@ export default function Login() {
         {/* Login Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <Building2 className="w-9 h-9 text-white" />
-            </div>
-            <h1 className="text-xl font-bold text-slate-800">D.E.N.N.I.S.</h1>
-            <p className="text-sm text-slate-500 mt-1">Digital Ecosystem for Navigation, Notifications, Information, and Schedules</p>
+            {settings.logo_url ? (
+              <img src={settings.logo_url} alt="Logo" className="w-16 h-16 rounded-2xl object-cover mx-auto mb-4 shadow-lg" />
+            ) : (
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <Building2 className="w-9 h-9 text-white" />
+              </div>
+            )}
+            <h1 className="text-xl font-bold text-slate-800">{settings.site_name}</h1>
+            <p className="text-sm text-slate-500 mt-1">{settings.site_description}</p>
           </div>
 
           {error && (

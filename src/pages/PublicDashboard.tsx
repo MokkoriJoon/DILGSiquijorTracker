@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { DatabaseService } from '../services/database';
+import { useSiteSettings } from '../context/SiteSettingsContext';
 import type { TaskInstance } from '../types';
 import {
   Building2, Shield, Users, CheckCircle2, Clock, AlertTriangle,
@@ -9,6 +10,7 @@ import {
 import { formatName } from '../utils/format';
 
 export default function PublicDashboard() {
+  const { settings } = useSiteSettings();
   const [stats, setStats] = useState({
     total: 0, completed: 0, pending: 0, overdue: 0
   });
@@ -206,12 +208,16 @@ export default function PublicDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center shadow-lg">
-                <Building2 className="w-6 h-6 text-white" />
-              </div>
+              {settings.logo_url ? (
+                <img src={settings.logo_url} alt="Logo" className="w-12 h-12 rounded-xl object-cover shadow-lg" />
+              ) : (
+                <div className="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center shadow-lg">
+                  <Building2 className="w-6 h-6 text-white" />
+                </div>
+              )}
               <div>
-                <h1 className="text-xl lg:text-2xl font-bold">D.E.N.N.I.S.</h1>
-                <p className="text-blue-200 text-xs">DILG Siquijor Task Tracker</p>
+                <h1 className="text-xl lg:text-2xl font-bold">{settings.site_name}</h1>
+                <p className="text-blue-200 text-xs">{settings.site_description}</p>
               </div>
             </div>
             <Link
