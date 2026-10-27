@@ -224,3 +224,31 @@ SELECT u.id, u.email, u.name, u.role,
 FROM public.users u
 LEFT JOIN auth.users au ON au.id = u.id OR lower(au.email) = lower(u.email)
 ORDER BY auth_status DESC, u.created_at;
+
+-- ------------------------------------------------------------
+-- 6) get_auth_status(user_ids) — powers the "No Auth" badge and the
+--    Repair Auth button in the Super Admin panel (UserManagement.tsx).
+--    SECURITY DEFINER so it may read auth.users; gated to ADMIN/SUPER_ADMIN.
+--    Returns one row per id: { id, has_auth }.
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.get_auth_status(user_ids uuid[])
+RETURNS TABLE(id uuid, has_auth boolean)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    u.id,
+    EXISTS (
+      SELECT 1 FROM auth.users au
+      WHERE au.id = u.id
+         OR lower(au.email) = lower(u.email)
+    ) AS has_auth
+  FROM public.users u
+  WHERE u.id = ANY (user_ids)
+    AND public.get_current_user_role() IN ('SUPER_ADMIN', 'ADMIN');
+$$;
+
+REVOKE ALL ON FUNCTION public.get_auth_status(uuid[]) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_auth_status(uuid[]) TO authenticated;

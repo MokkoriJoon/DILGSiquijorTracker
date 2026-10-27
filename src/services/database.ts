@@ -925,6 +925,75 @@ export const DatabaseService = {
     return { success: true };
   },
 
+  /**
+   * Repair a legacy user's Supabase Auth account WITHOUT deleting anything.
+   *
+   * "Old users" (created before Supabase Auth was wired up) have no matching
+   * row in auth.users — they show as "No authentication logs available" in
+   * the Supabase dashboard and every RLS policy that checks auth.uid() fails,
+   * so they cannot add/assign tasks or save bookmarks. This calls the
+   * server-side endpoint /api/admin-repair-auth (service role key) which
+   * provisions/re-keys their auth account using the SAME uuid as their
+   * public.users.id and the SAME email + stored password — so their login
+   * credentials are unchanged, but from their next sign-in they get a real
+   * JWT session and all RLS policies pass again.
+   *
+   * NOTE: this method works even when the caller's own browser session is the
+   * custom (no-JWT) fallback login — the admin token alone authenticates the
+   * request; the Bearer header is only sent when a real session exists.
+   */
+  async repairUserAuth(id: string): Promise<{ success: boolean; action?: string; temporaryPassword?: string; error?: string }> {
+    const token = await this.getAdminToken();
+    if (!token) {
+      return {
+        success: false,
+        error:
+          'Admin token unavailable. Deploy api/admin-repair-auth.ts with SUPABASE_SERVICE_ROLE_KEY set, ' +
+          'run FIX_USER_DELETE_PERMISSIONS.sql (installs the gated get_service_token_hash RPC), ' +
+          'run FIX_OLD_USERS_AUTH_RLS.sql, or set VITE_SUPABASE_SERVICE_TOKEN.',
+      };
+    }
+
+    try {
+      // Best-effort Bearer token — omitted silently for legacy sessions.
+      let accessToken: string | undefined;
+      try {
+        const { data } = await supabase.auth.getSession();
+        accessToken = data?.session?.access_token;
+      } catch {
+        /* no JWT session available */
+      }
+      const res = await fetch('/api/admin-repair-auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ id, token }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (res.ok && result.success) {
+        return {
+          success: true,
+          action: result.action,
+          temporaryPassword: result.temporaryPassword,
+        };
+      }
+      if (res.status === 404) {
+        return {
+          success: false,
+          error: 'Repair endpoint not deployed yet. Deploy api/admin-repair-auth.ts to Vercel.',
+        };
+      }
+      return { success: false, error: result.error || `Server returned ${res.status}` };
+    } catch (e) {
+      return {
+        success: false,
+        error: e instanceof Error ? e.message : 'Could not reach the repair endpoint',
+      };
+    }
+  },
+
   async updateUser(id: string, updates: { name?: string; department?: string; position?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'; password?: string }): Promise<{ success: boolean; error?: string }> {
     const updateData: any = {};
     
@@ -1028,6 +1097,7 @@ export const UserService = {
     return result;
   },
   delete: (id: string) => DatabaseService.deleteUser(id),
+  repairAuth: (id: string) => DatabaseService.repairUserAuth(id),
 };
 
 // Reset function (clears all data - use with caution)
