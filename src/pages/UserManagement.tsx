@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { DatabaseService, UserService } from '../services/database';
+import { useAuth } from '../context/AuthContext';
 import { Plus, Search, Shield, User, Edit2, Trash2, X, Key } from 'lucide-react';
 import { DEPARTMENTS } from '../data/mockData';
 import { formatName, formatNameInput } from '../utils/format';
 
 export default function UserManagement() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<any>(null);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     loadUsers();
@@ -28,9 +31,26 @@ export default function UserManagement() {
     u.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Role-based permissions: Super Admins can delete anyone except themselves;
+  // Admins cannot delete Super Admins (or themselves).
+  const canDeleteUser = (target: any) => {
+    if (!currentUser) return false;
+    if (target.id === currentUser.id) return false; // never delete yourself
+    if (currentUser.role === 'SUPER_ADMIN') return true;
+    if (currentUser.role === 'ADMIN') return target.role !== 'SUPER_ADMIN';
+    return false;
+  };
+
   const handleDelete = async (id: string, name: string) => {
+    setDeleteError('');
     if (confirm(`Delete user "${name}"? This cannot be undone.`)) {
-      await UserService.delete(id);
+      const result = await UserService.delete(id);
+      if (result && result.success === false) {
+        setDeleteError(
+          `Failed to delete user: ${result.error || 'Unknown error'}. ` +
+          'If this says row-level security blocked it, run FIX_USER_DELETE_PERMISSIONS.sql in the Supabase SQL Editor.'
+        );
+      }
       await loadUsers();
     }
   };
