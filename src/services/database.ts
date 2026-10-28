@@ -692,28 +692,21 @@ export const DatabaseService = {
    * of silent RLS failures for "old users" (users whose public.users row has no
    * matching Supabase Auth account / session).
    */
-  async diagnoseWriteAccess(userId: string): Promise<string | null> {
+  /**
+   * Simple-mode write check: verifies the users table is reachable with the
+   * anon key (RLS opened by SIMPLE_AUTH_NO_SIGNUP.sql). Returns a readable
+   * reason when writes would fail, or null when everything looks good.
+   */
+  async diagnoseWriteAccess(_userId?: string): Promise<string | null> {
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-
-      if (!authUser) {
-        return 'You are not signed in with a Supabase Auth session. This account was created before authentication was enabled ("old user"), so the database blocks all writes. Please ask an admin to re-create your account from User Management, or run FIX_OLD_USERS_AUTH_RLS.sql and log in again.';
-      }
-
-      if (authUser.id !== userId) {
-        return `Your login id (${authUser.id}) does not match your user profile id (${userId}). Row-level security is blocking task/bookmark changes. An admin must align the two ids (re-create the user or run FIX_OLD_USERS_AUTH_RLS.sql).`;
-      }
-
-      // Verify the caller's own role row is readable (some old rows may be
-      // invisible to RLS policies on the users table).
-      const { error: probeError } = await supabase
+      const { error } = await supabase
         .from('users')
         .select('id, role')
-        .eq('id', authUser.id)
+        .eq('id', _userId || '00000000-0000-4000-8000-000000000000')
         .maybeSingle();
 
-      if (probeError) {
-        return `RLS is blocking access to your own user record: ${probeError.message}. Run FIX_ALL_ADMIN_PERMISSIONS.sql / FIX_TASK_TEMPLATES_RLS_COMPLETE.sql in the Supabase SQL Editor.`;
+      if (error) {
+        return `The database rejected the request: ${error.message}. Run SIMPLE_AUTH_NO_SIGNUP.sql once in the Supabase SQL Editor to open RLS access.`;
       }
 
       return null;
@@ -739,6 +732,11 @@ export const DatabaseService = {
     return data || [];
   },
 
+  /**
+   * Create a user directly in public.users (SIMPLE MODE — no Supabase Auth).
+   * The id is generated client-side; the password is stored in plain text so
+   * admins can view it in User Management. No signup emails, no verification.
+   */
   async createUser(userData: {
     email: string;
     name: string;
@@ -747,41 +745,79 @@ export const DatabaseService = {
     role: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD';
     password: string;
   }) {
-    // Create auth user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: userData.email,
-      password: userData.password,
-      options: {
-        data: {
-          full_name: userData.name,
-          department: userData.department,
-          position: userData.position,
-          role: userData.role,
-        },
-      },
-    });
-    
-    if (authError) return { success: false, error: authError.message };
-    if (!authData.user) return { success: false, error: 'Failed to create user' };
-    
-    // Create profile with password stored for admin visibility
-    const { error: profileError } = await supabase
+    const normalizedEmail = String(userData.email || '').trim().toLowerCase();
+
+    // Reject duplicates up-front with a friendly message.
+    const { data: existing } = await supabase
       .from('users')
-      .upsert({
-        id: authData.user.id,
-        email: userData.email,
-        name: userData.name,
-        department: userData.department,
-        position: userData.position,
-        role: userData.role,
-        password: userData.password, // Store plain text password for admin view
-      }, { onConflict: 'id' });
-    
-    if (profileError) {
-      return { success: false, error: profileError.message };
+      .select('id')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+    if (existing) {
+      return { success: false, error: 'A user with this email already exists.' };
     }
-    
-    return { success: true };
+
+    const id = (globalThis.crypto as any)?.randomUUID
+      ? (globalThis.crypto as any).randomUUID()
+      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
+
+    const { error: insertError } = await supabase.from('users').insert({
+      id,
+      email: normalizedEmail,
+      name: userData.name,
+      department: userData.department,
+      position: userData.position,
+      role: userData.role,
+      password: userData.password, // plain text on purpose — simple hobby project
+      visible: true,
+    });
+
+    if (insertError) {
+      console.error('[DB] createUser insert error:', insertError);
+      let errorMessage = insertError.message;
+      if (insertError.code === '23505') {
+        errorMessage = 'A user with this email already exists.';
+      } else if (insertError.code === '42501' || /row-level security/i.test(insertError.message || '')) {
+        errorMessage =
+          'Row-level security blocked the insert. Run SIMPLE_AUTH_NO_SIGNUP.sql once in the Supabase SQL Editor.';
+      }
+      return { success: false, error: errorMessage };
+    }
+
+    return { success: true, id };
+  },
+
+  /**
+   * Fetch stored (plain-text) passwords for all users via the SECURITY DEFINER
+   * RPC installed by SIMPLE_AUTH_NO_SIGNUP.sql. Falls back to reading the
+   * column directly when the RPC is not installed yet.
+   */
+  async getUserPasswords(): Promise<Record<string, string>> {
+    const map: Record<string, string> = {};
+    try {
+      const { data, error } = await supabase.rpc('admin_get_users_with_passwords');
+      if (!error && Array.isArray(data)) {
+        for (const row of data as any[]) {
+          if (row?.id) map[String(row.id)] = row.password ?? '';
+        }
+        return map;
+      }
+    } catch (e) {
+      console.warn('[DB] getUserPasswords RPC failed:', e);
+    }
+    // Fallback: direct select (works while RLS/column access allows it)
+    try {
+      const { data } = await supabase.from('users').select('id, password');
+      for (const row of (data as any[]) || []) {
+        if (row?.id) map[String(row.id)] = row.password ?? '';
+      }
+    } catch {
+      /* ignore */
+    }
+    return map;
   },
 
   /**
@@ -855,11 +891,12 @@ export const DatabaseService = {
     }
   },
 
+  /**
+   * Delete a user directly from public.users (SIMPLE MODE — no Supabase Auth
+   * accounts to clean up). Related rows (tasks, assignments, notifications,
+   * bookmarks, uploads) are removed first so nothing dangles.
+   */
   async deleteUser(id: string): Promise<{ success: boolean; error?: string }> {
-    // Deleting another user (especially one whose profile has no matching
-    // auth.uid()) cannot be done through RLS with the anon key, and removing
-    // the Supabase Auth account requires the service role. Both are handled
-    // server-side by /api/admin-delete-user (see api/admin-delete-user.ts).
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id || ''))) {
       return {
         success: false,
@@ -867,111 +904,50 @@ export const DatabaseService = {
       };
     }
 
-    const endpointHit = await this.callAdminEndpoint('/api/admin-delete-user', { id });
-    if (endpointHit.ok && endpointHit.result?.success) {
-      return { success: true };
-    }
-    if (endpointHit.status === 404) {
-      // Endpoint not deployed yet - fall back to the client-side path below.
-      console.warn('[DB] /api/admin-delete-user not found; falling back to direct delete.');
-    } else if (endpointHit.status !== 0) {
-      // The endpoint IS deployed — report its real error instead of silently
-      // falling through to an anon-key delete that RLS will block anyway.
-      console.error('[DB] Admin delete endpoint failed:', endpointHit.result);
-      const detail = endpointHit.result?.error
-        || endpointHit.result?.message
-        || (typeof endpointHit.result === 'string' ? endpointHit.result.slice(0, 300) : '');
-      return {
-        success: false,
-        error:
-          detail ||
-          `The delete endpoint returned HTTP ${endpointHit.status} with no error message. ` +
-          'Check the Vercel function logs for /api/admin-delete-user, and run ' +
-          'FIX_USER_DELETE_FOREIGN_KEYS.sql in the Supabase SQL Editor.',
-      };
-    } else {
-      console.warn('[DB] Admin delete endpoint unreachable:', endpointHit.networkError);
+    // 1) Clean up related data first (FK references into users).
+    for (const [table, column] of [
+      ['uploaded_files', 'uploaded_by'],
+      ['task_instances', 'assigned_to'],
+      ['task_assignments', 'user_id'],
+      ['notifications', 'user_id'],
+      ['personal_bookmarks', 'user_id'],
+    ] as const) {
+      const { error } = await supabase.from(table).delete().eq(column, id);
+      if (error) console.warn(`[DB] Could not clean ${table} for deleted user:`, error.message);
     }
 
-    // Fallback: direct deletes with the anon key (works only if the RLS
-    // policies from FIX_USER_DELETE_PERMISSIONS.sql are installed).
-    // 1) Delete the profile row from the users table.
-    const { error: userError } = await supabase
+    // 2) Delete the profile row itself.
+    const { data: deletedRows, error: userError } = await supabase
       .from('users')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .select();
 
     if (userError) {
       console.error('[DB] Error deleting user:', userError);
-      return { success: false, error: userError.message };
+      let msg = userError.message;
+      if (userError.code === '42501' || /row-level security/i.test(msg)) {
+        msg = 'Row-level security blocked the delete. Run SIMPLE_AUTH_NO_SIGNUP.sql once in the Supabase SQL Editor.';
+      }
+      return { success: false, error: msg };
     }
 
-    // No rows actually removed? RLS silently filtered the DELETE.
-    const { data: stillThere, error: checkError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', id)
-      .maybeSingle();
-    if (!checkError && stillThere) {
+    if (!deletedRows || deletedRows.length === 0) {
       return {
         success: false,
         error:
-          'Row-level security blocked the delete (the user is still in the database). ' +
-          'Deploy api/admin-delete-user.ts with SUPABASE_SERVICE_ROLE_KEY set, and run ' +
-          'FIX_USER_DELETE_PERMISSIONS.sql in the Supabase SQL Editor.',
+          'No user row was removed — RLS may be silently filtering deletes. ' +
+          'Run SIMPLE_AUTH_NO_SIGNUP.sql once in the Supabase SQL Editor.',
       };
-    }
-
-    // 2) Clean up related data so nothing is left dangling.
-    //    Task instances assigned to this user are removed first (they have a
-    //    foreign key to users), then any explicit assignment rows.
-    const { error: instError } = await supabase
-      .from('task_instances')
-      .delete()
-      .eq('assigned_to', id);
-    if (instError) console.warn('[DB] Could not clean task instances for deleted user:', instError.message);
-
-    const { error: assignError } = await supabase
-      .from('task_assignments')
-      .delete()
-      .eq('user_id', id);
-    if (assignError) console.warn('[DB] Could not clean task assignments for deleted user:', assignError.message);
-
-    const { error: notifError } = await supabase
-      .from('notifications')
-      .delete()
-      .eq('user_id', id);
-    if (notifError) console.warn('[DB] Could not clean notifications for deleted user:', notifError.message);
-
-    const { error: bmError } = await supabase
-      .from('personal_bookmarks')
-      .delete()
-      .eq('user_id', id);
-    if (bmError) console.warn('[DB] Could not clean bookmarks for deleted user:', bmError.message);
-
-    // 3) Also try to remove the Supabase Auth account so the email can be
-    //    reused. Requires the service role, so this usually fails from the
-    //    browser; failure here is non-fatal.
-    try {
-      const { error: authError } = await supabase.auth.admin.deleteUser(id);
-      if (authError) {
-        console.warn('[DB] Could not delete auth user (profile was removed):', authError.message);
-      }
-    } catch (e) {
-      console.warn('[DB] Auth user cleanup skipped:', e);
     }
 
     return { success: true };
   },
 
   /**
-   * Full clean-slate reset: deletes ALL accounts (public.users profiles, every
-   * related row, and every Supabase Auth user) and re-creates one guaranteed
-   * Super Admin so the login/registration system can be rebuilt from scratch:
-   * Super Admin first, then Admins, then Standard users.
-   *
-   * Handled server-side by /api/admin-reset-users (service role key). Only a
-   * verified SUPER_ADMIN caller with { confirm: "RESET" } is accepted.
+   * Full clean-slate reset (SIMPLE MODE): deletes every row from all app
+   * tables and re-creates one guaranteed Super Admin directly in
+   * public.users — no Supabase Auth, no server endpoints involved.
    */
   async resetAllUsers(overrides?: {
     superAdminEmail?: string;
@@ -984,120 +960,73 @@ export const DatabaseService = {
     warning?: string;
     result?: any;
   }> {
-    const hit = await this.callAdminEndpoint('/api/admin-reset-users', {
-      confirm: 'RESET',
-      ...(overrides || {}),
-    });
+    const email = String(overrides?.superAdminEmail || 'superadmin@dilg.gov.ph').trim().toLowerCase();
+    const password = overrides?.superAdminPassword || 'Admin@123';
+    const name = overrides?.superAdminName || 'Super Admin';
+    const department = overrides?.superAdminDepartment || '';
 
-    if (hit.ok && hit.result?.success) {
-      // Drop our own stale session/storage — our old auth user no longer
-      // exists after the wipe. The app will bounce to the login screen.
-      try {
-        await supabase.auth.signOut();
-      } catch {
-        /* ignore */
+    try {
+      // Wipe dependent data first, then profiles.
+      for (const table of [
+        'uploaded_files',
+        'task_instances',
+        'task_assignments',
+        'notifications',
+        'personal_bookmarks',
+        'scheduler_logs',
+        'users',
+      ]) {
+        const { error } = await supabase.from(table).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        if (error) console.warn(`[DB] resetAllUsers: could not clear ${table}:`, error.message);
       }
-      sessionStorage.removeItem('dilg_current_user');
-      return { success: true, result: hit.result };
-    }
+      // task_templates has no id-neq guard issue but clear it fully too.
+      const { error: tplErr } = await supabase.from('task_templates').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (tplErr) console.warn('[DB] resetAllUsers: could not clear task_templates:', tplErr.message);
 
-    if (hit.status === 404) {
+      const freshId = (globalThis.crypto as any)?.randomUUID
+        ? (globalThis.crypto as any).randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, () => ((Math.random() * 16) | 0).toString(16));
+
+      const { error: insertError } = await supabase.from('users').insert({
+        id: freshId,
+        email,
+        name,
+        department,
+        role: 'SUPER_ADMIN',
+        password,
+        visible: true,
+      });
+
+      if (insertError) {
+        return { success: false, error: insertError.message };
+      }
+
+      // Drop our own stale session — the previous accounts no longer exist.
+      sessionStorage.removeItem('dilg_current_user');
+      try { await supabase.auth.signOut(); } catch { /* ignore */ }
+
+      return {
+        success: true,
+        result: { email, password, name },
+        warning: 'Sign in with the new Super Admin account above.',
+      };
+    } catch (e) {
       return {
         success: false,
-        error:
-          'Reset endpoint not deployed yet. Deploy api/admin-reset-users.ts to Vercel ' +
-          '(with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY set), then try again.',
+        error: e instanceof Error ? e.message : 'Reset failed',
       };
     }
-    if (hit.status !== 0) {
-      return {
-        success: false,
-        error:
-          hit.result?.error ||
-          hit.result?.message ||
-          `The reset endpoint returned HTTP ${hit.status}. Check the Vercel function logs for /api/admin-reset-users.`,
-        warning: hit.result?.warning,
-      };
-    }
-    return {
-      success: false,
-      error: `Could not reach /api/admin-reset-users (${hit.networkError || 'network error'}).`,
-    };
   },
 
   /**
-   * Repair a legacy user's Supabase Auth account WITHOUT deleting anything.
-   *
-   * "Old users" (created before Supabase Auth was wired up) have no matching
-   * row in auth.users — they show as "No authentication logs available" in
-   * the Supabase dashboard and every RLS policy that checks auth.uid() fails,
-   * so they cannot add/assign tasks or save bookmarks. This calls the
-   * server-side endpoint /api/admin-repair-auth (service role key) which
-   * provisions/re-keys their auth account using the SAME uuid as their
-   * public.users.id and the SAME email + stored password — so their login
-   * credentials are unchanged, but from their next sign-in they get a real
-   * JWT session and all RLS policies pass again.
-   *
-   * NOTE: this method works even when the caller's own browser session is the
-   * custom (no-JWT) fallback login — the admin token alone authenticates the
-   * request; the Bearer header is only sent when a real session exists.
+   * No longer needed in simple mode (there are no auth.users rows to repair).
+   * Kept so old UI callbacks resolve gracefully.
    */
-  async repairUserAuth(id: string): Promise<{ success: boolean; action?: string; temporaryPassword?: string; error?: string }> {
-    // The endpoint accepts a verified admin JWT alone (bootstrap path) even
-    // when no shared-secret token is configured yet — see api/_shared.ts.
-    const hit = await this.callAdminEndpoint('/api/admin-repair-auth', { id });
-    if (hit.ok && hit.result?.success) {
-      return {
-        success: true,
-        action: hit.result.action,
-        temporaryPassword: hit.result.temporaryPassword,
-      };
-    }
-    if (hit.status === 404) {
-      return {
-        success: false,
-        error: 'Repair endpoint not deployed yet. Deploy api/admin-repair-auth.ts to Vercel.',
-      };
-    }
+  async repairUserAuth(_id: string): Promise<{ success: boolean; action?: string; temporaryPassword?: string; error?: string }> {
     return {
       success: false,
-      error:
-        hit.result?.error ||
-        hit.networkError ||
-        `The repair endpoint returned HTTP ${hit.status}. Check the Vercel function logs for /api/admin-repair-auth.`,
+      error: 'Auth repair is not needed anymore — accounts live directly in the users table now. Use "Reset Password" instead.',
     };
-  },
-
-  async updateUser(id: string, updates: { name?: string; department?: string; position?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'; password?: string }): Promise<{ success: boolean; error?: string }> {
-    const updateData: any = {};
-    
-    if (updates.name !== undefined) updateData.name = updates.name;
-    if (updates.department !== undefined) updateData.department = updates.department;
-    if (updates.position !== undefined) updateData.position = updates.position;
-    if (updates.role !== undefined) updateData.role = updates.role;
-    if (updates.password !== undefined) updateData.password = updates.password;
-
-    console.log('[DB] Updating user:', id, 'with data:', updateData);
-
-    const { data, error } = await supabase
-      .from('users')
-      .update(updateData)
-      .eq('id', id)
-      .select();
-    
-    if (error) {
-      console.error('[DB] Error updating user:', error);
-      return { success: false, error: explainDbError(error.message, error.code) };
-    }
-
-    // Check if any rows were actually updated
-    if (!data || data.length === 0) {
-      console.error('[DB] No rows were updated. This might be a permissions issue.');
-      return { success: false, error: 'No rows were updated. Check RLS policies.' };
-    }
-
-    console.log('[DB] User updated successfully:', data);
-    return { success: true };
   },
 
   // ============ STATS ============
