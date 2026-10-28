@@ -17,8 +17,6 @@ export default function UserManagement() {
   const [deleteError, setDeleteError] = useState('');
   const [resetMessage, setResetMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [resetting, setResetting] = useState(false);
-  // Map of userId -> true when a matching auth.users account exists.
-  const [authStatus, setAuthStatus] = useState<Record<string, boolean>>({});
   const [repairingId, setRepairingId] = useState<string | null>(null);
   const [repairMessage, setRepairMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -31,29 +29,8 @@ export default function UserManagement() {
     const data = await DatabaseService.getUsers();
     setUsers(data);
     setLoading(false);
-    checkAuthAccounts(data);
   }
 
-  /**
-   * Best-effort detection of legacy users ("No authentication logs"):
-   * ask the gated RPC public.get_auth_status() (installed by
-   * FIX_OLD_USERS_AUTH_RLS.sql / FIX_USER_DELETE_PERMISSIONS.sql) which
-   * profiles have a matching row in auth.users. If the RPC is not installed
-   * yet we simply show no badges — Repair Auth still works either way.
-   */
-  async function checkAuthAccounts(data: any[]) {
-    try {
-      const ids = data.map((u: any) => u.id).filter(Boolean);
-      if (ids.length === 0 || !supabase) return;
-      const { data: rows, error } = await supabase.rpc('get_auth_status', { user_ids: ids });
-      if (error || !rows) return;
-      const map: Record<string, boolean> = {};
-      (rows as any[]).forEach((r: any) => { map[r.id] = !!r.has_auth; });
-      setAuthStatus(map);
-    } catch {
-      /* RPC not installed — silently skip badges */
-    }
-  }
 
   const canRepairUser = (target: any) => {
     if (!currentUser) return false;
@@ -62,7 +39,7 @@ export default function UserManagement() {
     return false;
   };
 
-  const handleRepairAuth = async (target: any) => {
+  const handleResetUserData = async (target: any) => {
     setRepairMessage(null);
     setDeleteError('');
     if (!canRepairUser(target)) {
@@ -70,41 +47,37 @@ export default function UserManagement() {
       return;
     }
     if (!confirm(
-      `Repair Supabase Auth for "${formatName(target.name)}" (${target.email})?\n\n` +
-      'This does NOT delete the account or any of its tasks/bookmarks. It creates/fixes ' +
-      'the hidden auth record using the SAME email and current password, so the user keeps ' +
-      'their login and will be able to add/assign tasks and save bookmarks again after their next sign-in.'
+      `Reset all data for "${formatName(target.name)}" (${target.email})?\n\n` +
+      'This does NOT delete the account or any of its tasks/bookmarks. It clears this user\u2019s ' +
+      'assigned task instances, assignments, notifications and personal bookmarks so they start fresh.'
     )) {
       return;
     }
     setRepairingId(target.id);
-    const result = await UserService.repairAuth(target.id);
-    setRepairingId(null);
-    if (result.success) {
-      const actionText =
-        result.action === 'created' ? 'Auth account created' :
-        result.action === 'rekeyed' ? 'Auth account re-linked to the profile id' :
-        'Auth account synced';
-      // The user's login (email + current password) is unchanged — the server
-      // reused the stored password. They just need to sign out and back in
-      // once so a real Supabase JWT session starts and RLS passes.
-      setRepairMessage({
-        type: 'success',
-        text:
-          `${actionText} for ${formatName(target.name)}. Their login (email + current password) is unchanged — ` +
-          'they should log out and log back in once so a real Supabase session starts. ' +
-          (result.temporaryPassword
-            ? `No stored password was found, so a temporary one was set: ${result.temporaryPassword}`
-            : ''),
-      });
-      setAuthStatus(prev => ({ ...prev, [target.id]: true }));
-    } else {
-      setRepairMessage({
-        type: 'error',
-        text:
-          `Could not repair ${formatName(target.name)}: ${result.error || 'Unknown error'}. ` +
-          'Make sure api/admin-repair-auth.ts is deployed with SUPABASE_SERVICE_ROLE_KEY set.',
-      });
+    try {
+      const cleanup: Array<[string, string]> = [
+        ['task_instances', 'assigned_to'],
+        ['task_assignments', 'user_id'],
+        ['notifications', 'user_id'],
+        ['personal_bookmarks', 'user_id'],
+      ];
+      let lastError = '';
+      for (const [table, column] of cleanup) {
+        const { error } = await supabase.from(table).delete().eq(column, target.id);
+        if (error) lastError = `${table}: ${error.message}`;
+      }
+      if (lastError) {
+        setRepairMessage({ type: 'error', text: `Some data could not be cleared — ${lastError}` });
+      } else {
+        setRepairMessage({
+          type: 'success',
+          text: `All task/notification/bookmark data for ${formatName(target.name)} was cleared. Their login is unchanged.`,
+        });
+      }
+    } catch (e: any) {
+      setRepairMessage({ type: 'error', text: `Could not reset user data: ${e?.message || 'Unknown error'}` });
+    } finally {
+      setRepairingId(null);
     }
   };
 
@@ -124,15 +97,21 @@ export default function UserManagement() {
       setResetMessage({ type: 'error', text: 'Only Super Admins can reset all accounts.' });
       return;
     }
-    if (!window.confirm(
+    const newPassword = window.prompt(
       'RESET ALL ACCOUNTS?\n\n' +
-      'This DELETES every user account (Super Admins, Admins, Standard users), ' +
-      'all their tasks, assignments, notifications and bookmarks, and every Supabase Auth login.\n\n' +
-      'A fresh Super Admin will be re-created automatically:\n' +
-      `  ${currentUser.email} (your current Super Admin email)\n` +
-      'with the system default password configured on the server (api/admin-reset-users.ts).\n\n' +
-      'Afterwards, rebuild in this order: create ADMINs in User Management, then let STANDARD users register.\n\n' +
-      'This cannot be undone. Continue?'
+      'This DELETES every user account (Super Admins, Admins, Standard users) and all their ' +
+      'tasks, assignments, notifications and bookmarks.\n\n' +
+      `A fresh Super Admin will be re-created for ${currentUser.email}.\n` +
+      'Enter the NEW Super Admin password to use (min 6 characters), or press OK to keep "Admin@123":',
+      'Admin@123'
+    );
+    if (newPassword === null) return; // cancelled
+    if (newPassword.trim().length < 6) {
+      setResetMessage({ type: 'error', text: 'The new Super Admin password must be at least 6 characters.' });
+      return;
+    }
+    if (!window.confirm(
+      'This cannot be undone. Continue with the full reset?'
     )) {
       return;
     }
@@ -146,16 +125,17 @@ export default function UserManagement() {
     try {
       const result = await UserService.resetAll({
         superAdminEmail: currentUser.email,
+        superAdminPassword: newPassword.trim(),
         superAdminName: currentUser.name,
         superAdminDepartment: currentUser.department,
       });
       if (result.success) {
-        const sa = result.result?.superAdmin;
+        const sa = result.result?.superAdmin || result.result;
         setResetMessage({
           type: 'success',
           text:
-            `All accounts were wiped (${result.result?.deletedAuthUsers ?? 0} auth users removed). ` +
-            `A fresh Super Admin was created for ${sa?.email}. Sign out and sign back in to continue ` +
+            'All accounts were wiped. A fresh Super Admin was created for ' +
+            `${sa?.email || currentUser.email}. Sign out and sign back in to continue ` +
             'rebuilding: add Admins first, then have Standard users register.',
         });
         setTimeout(() => { window.location.href = '/login'; }, 4000);
@@ -284,15 +264,6 @@ export default function UserManagement() {
                     <div>
                       <p className="text-sm font-medium text-slate-800">
                         {formatName(user.name)}
-                        {authStatus[user.id] === false && (
-                          <span
-                            className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-700 align-middle"
-                            title="No Supabase Auth account for this user — they cannot save tasks or bookmarks until repaired."
-                          >
-                            <Wrench className="w-3 h-3" />
-                            No Auth
-                          </span>
-                        )}
                       </p>
                       <p className="text-xs text-slate-500">{user.email}</p>
                     </div>
@@ -323,18 +294,18 @@ export default function UserManagement() {
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-end gap-2">
                     <button
-                      onClick={() => handleRepairAuth(user)}
+                      onClick={() => handleResetUserData(user)}
                       disabled={!canRepairUser(user) || repairingId === user.id}
                       className={`p-2 rounded-lg transition-colors disabled:opacity-30 ${
-                        authStatus[user.id] === false
+                        false
                           ? 'bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-300'
                           : 'hover:bg-emerald-50'
                       }`}
                       title={
                         !canRepairUser(user)
                           ? 'Only Super Admins can repair Super Admin accounts'
-                          : authStatus[user.id] === false
-                            ? 'Repair Supabase Auth (keep same login) — fixes missing auth/logs so this user can add tasks & bookmarks'
+                          : false
+                            ? 'Clear this user\u2019s tasks, notifications and bookmarks (keeps their login)'
                             : 'Refresh / re-sync Supabase Auth for this account (same login, no data deleted)'
                       }
                     >
