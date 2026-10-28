@@ -406,8 +406,13 @@ BEGIN
 END $$;
 
 -- Helper RPC used by api/admin-delete-user.ts to self-heal unknown refs.
+-- Signature note: the RETURNS TABLE column list must match the names used in
+-- the final SELECT (Postgres binds OUT parameters to the output columns by
+-- position and requires them to agree). The endpoint reads `schema`,
+-- `table_name` and `column_name` from each record, so those are the names here.
+DROP FUNCTION IF EXISTS public.admin_find_user_references(uuid);
 CREATE OR REPLACE FUNCTION public.admin_find_user_references(p_user_id uuid)
-RETURNS TABLE(table_name text, column_name text, fkey_name text)
+RETURNS TABLE(schema text, table_name text, column_name text)
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
@@ -422,7 +427,8 @@ AS $$
   JOIN LATERAL (SELECT a.attname FROM pg_attribute a
                 WHERE a.attrelid = con.conrelid AND a.attnum = ANY(con.conkey) LIMIT 1) get ON true
   WHERE con.contype = 'f' AND fn.nspname = 'public' AND frel.relname = 'users'
-    AND n.nspname = 'public';
+    AND n.nspname = 'public'
+    AND p_user_id IS NOT NULL;
 $$;
 
 REVOKE ALL ON FUNCTION public.admin_find_user_references(uuid) FROM PUBLIC, anon, authenticated;
