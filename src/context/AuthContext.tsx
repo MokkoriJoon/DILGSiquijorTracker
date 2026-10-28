@@ -13,7 +13,10 @@ interface AuthContextType {
     department: string
   ) => Promise<{ success: boolean; error?: string; isFirstAdmin?: boolean }>;
   logout: () => Promise<void>;
+  /** True when the signed-in account is SUPER_ADMIN or ADMIN. */
   isAdmin: boolean;
+  /** True only for SUPER_ADMIN — the role that can assign ADMIN/STANDARD in User Management. */
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -120,7 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   return (
     <AuthContext.Provider
@@ -131,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         isAdmin,
+        isSuperAdmin,
       }}
     >
       {children}

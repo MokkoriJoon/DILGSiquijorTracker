@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
+import { AuthService } from '../services/auth';
 import { Building2, UserPlus, Eye, EyeOff, ArrowLeft, AlertCircle, Shield } from 'lucide-react';
 import { DEPARTMENTS } from '../data/mockData';
 import { formatNameInput } from '../utils/format';
@@ -10,7 +10,7 @@ export default function Register() {
   const navigate = useNavigate();
   const { register } = useAuth();
   
-  const [isFirstUser, setIsFirstUser] = useState(true);
+  const [isFirstUser, setIsFirstUser] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -31,39 +31,10 @@ export default function Register() {
   }, []);
 
   async function checkFirstUser() {
-    try {
-      const { count, error } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true });
-      
-      if (error) {
-        console.error('[Register] Error checking first user:', JSON.stringify(error));
-        // If RLS is blocking, ask the serverless bootstrap status endpoint
-        // (service role key) instead of guessing — it only returns aggregates.
-        if (error.code === '42501' || error.code === 'PGRST301' || !error.message) {
-          try {
-            const res = await fetch('/api/admin-bootstrap-status');
-            if (res.ok) {
-              const j = await res.json();
-              setIsFirstUser(Number(j.userCount ?? 0) === 0);
-              return;
-            }
-          } catch {
-            /* endpoint not deployed yet */
-          }
-          console.warn('[Register] Could not determine user count. Assuming first user.');
-          setIsFirstUser(true);
-        }
-        return;
-      }
-      
-      console.log('[Register] User count:', count);
-      setIsFirstUser(count === 0);
-    } catch (err) {
-      console.error('[Register] Exception in checkFirstUser:', err);
-      // Assume first user on error
-      setIsFirstUser(true);
-    }
+    // First-ever account becomes SUPER_ADMIN; everyone after registers as
+    // STANDARD (Admins are assigned by a Super Admin in User Management).
+    const first = await AuthService.isFirstAccount();
+    setIsFirstUser(first);
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -108,7 +79,7 @@ export default function Register() {
       // Role tiering: first-ever account becomes SUPER_ADMIN, everyone else
       // registers as STANDARD. Admins are created/promoted by a Super Admin
       // in User Management — never self-registered.
-      let result = await register(
+      const result = await register(
         formData.email,
         formData.password,
         formData.name,
@@ -132,10 +103,11 @@ export default function Register() {
       }
 
       if (result.success) {
-        if (isFirstUser) {
-          // First Super Admin - show welcome message and redirect to dashboard
+        if (result.isFirstAdmin || result.user?.role === 'SUPER_ADMIN') {
+          // First-ever account: became SUPER_ADMIN — show welcome message.
           navigate('/dashboard?welcome=superadmin');
         } else {
+          // Every other registration lands as STANDARD.
           navigate('/dashboard');
         }
       } else {

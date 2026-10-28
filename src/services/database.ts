@@ -1068,13 +1068,59 @@ export const DatabaseService = {
     };
   },
 
+  /**
+   * Update a user profile from User Management.
+   *
+   * Role-assignment rules (enforced here AND in the DB via RLS):
+   *   - Only a SUPER_ADMIN may change anyone's ROLE.
+   *   - A SUPER_ADMIN can assign STANDARD or ADMIN (and grant SUPER_ADMIN).
+   *   - The last remaining SUPER_ADMIN can never be demoted.
+   *   - Password changes additionally go through /api/admin-create-auth-user
+   *     so the Supabase Auth credential stays in sync with users.password.
+   */
   async updateUser(id: string, updates: { name?: string; department?: string; position?: string; role?: 'SUPER_ADMIN' | 'ADMIN' | 'STANDARD'; password?: string }): Promise<{ success: boolean; error?: string }> {
+    const caller = (await AuthService.getCurrentUser()) as any;
+
+    // ---- Guard for role changes ----
+    if (updates.role !== undefined) {
+      const newRole = String(updates.role).toUpperCase();
+      if (!['STANDARD', 'ADMIN', 'SUPER_ADMIN'].includes(newRole)) {
+        return { success: false, error: `Invalid role "${updates.role}".` };
+      }
+      if (!caller || String(caller.role).toUpperCase() !== 'SUPER_ADMIN') {
+        return { success: false, error: 'Only a Super Admin can assign roles (ADMIN / STANDARD).' };
+      }
+
+      // Load the target row to validate the transition.
+      const { data: target, error: targetError } = await supabase
+        .from('users')
+        .select('id, role')
+        .eq('id', id)
+        .maybeSingle();
+      if (targetError) {
+        return { success: false, error: explainDbError(targetError.message, targetError.code) };
+      }
+      if (!target) {
+        return { success: false, error: 'User not found. Reload the user list and try again.' };
+      }
+      const oldRole = String(target.role || '').toUpperCase();
+      if (oldRole === 'SUPER_ADMIN' && newRole !== 'SUPER_ADMIN') {
+        const { count, error: countError } = await supabase
+          .from('users')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', 'SUPER_ADMIN');
+        if (countError || (count ?? 0) <= 1) {
+          return { success: false, error: 'You cannot demote the last remaining Super Admin.' };
+        }
+      }
+    }
+
     const updateData: any = {};
-    
+
     if (updates.name !== undefined) updateData.name = updates.name;
     if (updates.department !== undefined) updateData.department = updates.department;
     if (updates.position !== undefined) updateData.position = updates.position;
-    if (updates.role !== undefined) updateData.role = updates.role;
+    if (updates.role !== undefined) updateData.role = String(updates.role).toUpperCase();
     if (updates.password !== undefined) updateData.password = updates.password;
 
     console.log('[DB] Updating user:', id, 'with data:', updateData);
@@ -1084,7 +1130,7 @@ export const DatabaseService = {
       .update(updateData)
       .eq('id', id)
       .select();
-    
+
     if (error) {
       console.error('[DB] Error updating user:', error);
       return { success: false, error: explainDbError(error.message, error.code) };
@@ -1094,6 +1140,23 @@ export const DatabaseService = {
     if (!data || data.length === 0) {
       console.error('[DB] No rows were updated. This might be a permissions issue.');
       return { success: false, error: 'No rows were updated. Check RLS policies.' };
+    }
+
+    // Keep the Supabase Auth credential in sync when the password changed, so
+    // the account keeps signing in through real Auth (not just legacy fallback).
+    if (updates.password) {
+      const emailRow = Array.isArray(data) ? data[0]?.email : undefined;
+      if (emailRow) {
+        try {
+          await fetch('/api/admin-create-auth-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, email: emailRow, password: updates.password }),
+          });
+        } catch (e) {
+          console.warn('[DB] Could not sync auth password (profile saved anyway):', e);
+        }
+      }
     }
 
     console.log('[DB] User updated successfully:', data);

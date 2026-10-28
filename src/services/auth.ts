@@ -14,7 +14,43 @@ export interface AuthResult {
  */
 export const AuthService = {
   /**
-   * Register a new user (clean rebuild of the auth flow)
+   * Authoritative check for "is this the first account in the system?"
+   * The very first registered user becomes SUPER_ADMIN; everyone after that
+   * registers as STANDARD (ADMINs are assigned by a Super Admin in User
+   * Management, never self-registered).
+   *
+   * Tries the direct count on public.users first; when RLS blocks it, falls
+   * back to the serverless bootstrap-status endpoint (service role key).
+   */
+  async isFirstAccount(): Promise<boolean> {
+    try {
+      const { count, error } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true });
+
+      if (!error) return (count ?? 0) === 0;
+
+      console.warn('[Auth] Direct user count blocked/failed:', error.message);
+      if (error.code === '42501' || error.message?.includes('permission denied')) {
+        try {
+          const res = await fetch('/api/admin-bootstrap-status');
+          if (res.ok) {
+            const j = await res.json();
+            return Number(j.userCount ?? 0) === 0;
+          }
+        } catch {
+          /* endpoint not deployed yet */
+        }
+      }
+    } catch (e) {
+      console.warn('[Auth] isFirstAccount exception:', e);
+    }
+    // Unknown state → do NOT grant elevated privileges.
+    return false;
+  },
+
+  /**
+   * Register a new user (clean rebuild of the login/registration system)
    *
    * Role tiering rules:
    *   - The VERY FIRST account ever registered becomes SUPER_ADMIN.
@@ -39,32 +75,7 @@ export const AuthService = {
       console.log('[Auth] Starting registration for:', normalizedEmail);
 
       // ---- Determine whether this is the first account (becomes SUPER_ADMIN) ----
-      const { count, error: countError } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true });
-
-      let isFirstUser = false;
-
-      if (countError) {
-        console.error('[Auth] Error counting users:', countError);
-        // If RLS blocks the count, fall back to asking the serverless
-        // bootstrap endpoint (it runs with the service role key).
-        if (countError.code === '42501' || countError.message?.includes('permission denied')) {
-          try {
-            const res = await fetch('/api/admin-bootstrap-status');
-            if (res.ok) {
-              const j = await res.json();
-              isFirstUser = Number(j.userCount ?? 0) === 0;
-            }
-          } catch {
-            /* endpoint not deployed yet — treat as non-first to avoid privilege grants */
-          }
-        } else {
-          return { success: false, error: `Database error: ${countError.message}` };
-        }
-      } else {
-        isFirstUser = count === 0;
-      }
+      const isFirstUser = await this.isFirstAccount();
 
       const role: Role = isFirstUser ? 'SUPER_ADMIN' : 'STANDARD';
       console.log('[Auth] Assigning role:', role);

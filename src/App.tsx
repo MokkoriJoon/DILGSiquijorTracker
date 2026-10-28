@@ -7,6 +7,7 @@ import { FilterProvider } from './context/FilterContext';
 import Layout from './components/Layout';
 import PublicDashboard from './pages/PublicDashboard';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import AdminDashboard from './pages/AdminDashboard';
 import TaskManagement from './pages/TaskManagement';
 import UserManagement from './pages/UserManagement';
@@ -57,6 +58,9 @@ function AppRoutes() {
       <Route path="/" element={<PublicDashboard />} />
       <Route path="/login" element={
         user ? <Navigate to="/dashboard" replace /> : <Login />
+      } />
+      <Route path="/register" element={
+        user ? <Navigate to="/dashboard" replace /> : <Register />
       } />
       
       {/* Protected routes */}
